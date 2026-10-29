@@ -1,0 +1,25 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Karla:wght@400;500;700&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #1c1410;
+  --color-kraft: #f3e6d4;
+  --color-chili: #c23c16;
+  --color-pandan: #1f6b52;
+  --color-teak: #6b3f24;
+  --font-display: "Fraunces", Georgia, serif;
+  --font-sans: "Karla", system-ui, sans-serif;
+}
+
+body {
+  background: radial-gradient(1200px 600px at 10% -10%, #ffe7c8 0%, transparent 50%), #f3e6d4;
+}
+
+.ticket {
+  box-shadow: 4px 6px 0 #1c1410;
+}
+
+.chip-on {
+  background: #1c1410;
+  color: #f3e6d4;
+}

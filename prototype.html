@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aims Solution IFM</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink: "#1c1410",
+            kraft: "#f3e6d4",
+            chili: "#c23c16",
+            pandan: "#1f6b52",
+            teak: "#6b3f24"
+          },
+          fontFamily: {
+            display: ['"Fraunces"', "Georgia", "serif"],
+            sans: ['"Karla"', "system-ui", "sans-serif"]
+          }
+        }
+      }
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Karla:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { background: radial-gradient(1200px 600px at 10% -10%, #ffe7c8 0%, transparent 50%), #f3e6d4; }
+    .ticket { box-shadow: 4px 6px 0 #1c1410; }
+    .chip-on { background: #1c1410; color: #f3e6d4; }
+  </style>
+</head>
+<body class="font-sans text-ink min-h-screen">
+  <div id="app"></div>
+
+  <script>
+    const REMOTE_URL = "https://vajojrsdblrlhcntuphz.supabase.co";
+    const REMOTE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZham9qcnNkYmxybGhjbnR1cGh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyODAzMjksImV4cCI6MjEwODg1NjMyOX0.7bURsSGG3KHR7FqsSx3WhlHppa4bIm7p8dJjm5KRoAk";
+    const LOCAL_URL = "http://127.0.0.1:54321";
+    const LOCAL_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
+    let sb;
+    let backendLabel = "connecting";
+
+    const MENU = [
+      {
+        cat: "Breakfast Sets",
+        items: [
+          { id: "set-a", name: "Set A", price: 3.5, desc: "Paratha & Curry + Egg", options: ["Kopi 'O'", "Teh 'O'"] },
+          { id: "set-b", name: "Set B", price: 4.0, desc: "Paratha & Curry + Egg", options: ["Kopi 'C'", "Teh 'C'"] },
+          { id: "set-c", name: "Set C", price: 3.0, desc: "Roti Kahwin + Egg", options: ["Kopi 'O'", "Teh 'O'"] },
+          { id: "set-c2", name: "Set C2", price: 3.5, desc: "Upgrade Roti Kahwin Cheese", options: ["Kopi 'O'", "Teh 'O'"] },
+          { id: "set-d", name: "Set D", price: 3.5, desc: "Roti Kahwin + Egg", options: ["Kopi 'C'", "Teh 'C'"] },
+          { id: "set-d2", name: "Set D2", price: 4.0, desc: "Upgrade Roti Kahwin Cheese", options: ["Kopi 'C'", "Teh 'C'"] }
+        ]
+      },
+      {
+        cat: "Nasi Goreng",
+        items: [
+          { id: "ng-ayam", name: "Nasi Goreng Ayam", price: 4.0 },
+          { id: "ng-daging", name: "Nasi Goreng Daging", price: 5.0 },
+          { id: "ng-udang", name: "Nasi Goreng Udang", price: 6.5 },
+          { id: "ng-kerang", name: "Nasi Goreng Kerang", price: 6.5 },
+          { id: "ng-cornbeef", name: "Nasi Goreng Cornbeef", price: 5.0 },
+          { id: "ng-kampung", name: "Nasi Goreng Kampung", price: 4.5 },
+          { id: "ng-belutak", name: "Nasi Goreng Belutak", price: 5.0 }
+        ]
+      },
+      {
+        cat: "Nasi Putih",
+        items: [
+          { id: "np-penyet", name: "Nasi Putih Ayam Penyet", price: 5.5 },
+          { id: "np-grill", name: "Nasi Putih Ayam Grill", price: 5.5 }
+        ]
+      },
+      {
+        cat: "Fried Noodles",
+        items: [
+          { id: "mg-ayam", name: "Mee Goreng Ayam", price: 4.0 },
+          { id: "mg-daging", name: "Mee Goreng Daging", price: 5.0 },
+          { id: "mg-udang", name: "Mee Goreng Udang", price: 6.5 },
+          { id: "mg-kerang", name: "Mee Goreng Kerang", price: 6.5 },
+          { id: "mg-penyet", name: "Mee Goreng Penyet", price: 6.0 },
+          { id: "mg-grill", name: "Mee Goreng Ayam Grill", price: 6.0 },
+          { id: "kt-ayam", name: "Kway Teow Goreng Ayam", price: 4.0 },
+          { id: "kt-daging", name: "Kway Teow Goreng Daging", price: 5.0 },
+          { id: "kt-udang", name: "Kway Teow Goreng Udang", price: 6.5 },
+          { id: "kt-kerang", name: "Kway Teow Goreng Kerang", price: 6.5 },
+          { id: "kt-penyet", name: "Kway Teow Goreng Penyet", price: 6.0 },
+          { id: "kt-grill", name: "Kway Teow Goreng Ayam Grill", price: 6.0 },
+          { id: "indo-penyet", name: "Indomee Penyet", price: 5.5 },
+          { id: "indo-grill", name: "Indomee Ayam Grill", price: 5.5 },
+          { id: "mee-instant", name: "Mee Instant", price: 1.0 }
+        ]
+      },
+      {
+        cat: "Roti",
+        items: [
+          { id: "paratha-curry", name: "Paratha w/ Curry", price: 2.0 },
+          { id: "paratha-kosong", name: "Paratha Kosong", price: 0.8 },
+          { id: "roti-kahwin", name: "Roti Kahwin", price: 1.5 },
+          { id: "roti-kahwin-cheese", name: "Roti Kahwin Cheese", price: 2.0 },
+          { id: "roti-celup", name: "Roti Celup Telur", price: 2.0 }
+        ]
+      },
+      {
+        cat: "Drinks",
+        items: [
+          { id: "kopi-teh-o", name: "Kopi / Teh 'O'", hot: 1.0, cold: 1.5 },
+          { id: "kopi-c", name: "Kopi / Kopi 'C'", hot: 1.5, cold: 1.8 },
+          { id: "kopi-goji", name: "Kopi Goji", hot: 1.5, cold: 1.8 },
+          { id: "teh-tarik", name: "Teh Tarik", hot: 1.5, cold: 1.8 },
+          { id: "kopi-tarik", name: "Kopi Tarik", hot: 1.5, cold: 2.0 },
+          { id: "honey-lemon", name: "Honey Lemon", hot: 1.5, cold: 2.0 },
+          { id: "lemon-tea", name: "Lemon Tea", hot: 1.7, cold: 2.0 },
+          { id: "kasturi", name: "Kasturi", hot: 1.5, cold: 1.8 },
+          { id: "lemon", name: "Lemon", hot: 1.5, cold: 1.5 },
+          { id: "longan", name: "Longan", price: 2.0 },
+          { id: "longan-milk", name: "Longan w/ Milk", price: 2.2 },
+          { id: "bandung", name: "Bandung (Rose Milk)", price: 1.5 },
+          { id: "banana-lemon", name: "Banana Lemon (Cordial)", price: 1.2 },
+          { id: "rose-lemon", name: "Rose Lemon (Cordial)", price: 1.2 }
+        ]
+      }
+    ];
+
+    const PROTEINS = [
+      { id: "ayam-merah", name: "Ayam Merah", price: 2.0 },
+      { id: "daging-rendang", name: "Daging Rendang", price: 3.0 },
+      { id: "ikan", name: "Ikan", price: 2.0 },
+      { id: "ayam-goreng", name: "Ayam Goreng", price: 2.0 },
+      { id: "sambal-udang", name: "Sambal Udang", price: 3.0 }
+    ];
+    const VEGGIES = ["Kangkung", "Taugeh", "Sambal", "Acar", "Telur Mata"].map((name) => ({
+      id: name.toLowerCase().replace(/\s+/g, "-"),
+      name,
+      price: 1.0
+    }));
+    const TABLES = Array.from({ length: 20 }, (_, i) => String(i + 1).padStart(2, "0"));
+    const CATS = ["All", ...MENU.map((m) => m.cat)];
+
+    const params = new URLSearchParams(location.search);
+    const state = {
+      view: params.get("view") || "menu",
+      table: params.get("table") || "",
+      cat: "All",
+      q: "",
+      tray: [],
+      orderType: "",
+      notes: "",
+      modal: false,
+      choice: {},
+      toast: "",
+      posTable: params.get("table") || "01",
+      posType: "dine_in",
+      posProtein: [],
+      posVeg: [],
+      tickets: [],
+      kdsFilter: "preparing",
+      kdsLoading: false,
+      kdsError: "",
+      sending: false,
+      salesRows: [],
+      salesLoading: false,
+      salesError: "",
+      salesFrom: "",
+      salesTo: "",
+      billTable: params.get("table") || "04",
+      billOrders: [],
+      billLoading: false,
+      billError: "",
+      lastCall: "",
+      dayClose: null
+    };
+    let toastTimer = 0;
+
+    function money(n) {
+      return "$" + Number(n).toFixed(2);
+    }
+    function businessDate(iso) {
+      const d = iso ? new Date(iso) : new Date();
+      return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Singapore", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+    }
+    function ticketCall(order) {
+      const no = order && order.ticket_no != null ? order.ticket_no : "";
+      const table = (order && order.table_number) || "--";
+      return no === "" ? "T" + table : "T" + table + " #" + no;
+    }
+    function typeLabel(t) {
+      return t === "bungkus" ? "Bungkus" : "Dine-In";
+    }
+    function esc(s) {
+      return String(s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+    function trayKey() {
+      return "aims-tray-" + (state.table || "none");
+    }
+    function loadTray() {
+      try { state.tray = JSON.parse(localStorage.getItem(trayKey()) || "[]"); }
+      catch { state.tray = []; }
+    }
+    function saveTray() {
+      localStorage.setItem(trayKey(), JSON.stringify(state.tray));
+    }
+    function trayCount() {
+      return state.tray.reduce((s, i) => s + i.qty, 0);
+    }
+    function trayTotal() {
+      return state.tray.reduce((s, i) => s + i.qty * i.price, 0);
+    }
+    function toast(msg) {
+      state.toast = msg;
+      render();
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { state.toast = ""; render(); }, 2800);
+    }
+    async function setView(view, extra) {
+      const p = new URLSearchParams(location.search);
+      p.set("view", view);
+      if (extra && extra.table) {
+        p.set("table", extra.table);
+        state.table = extra.table;
+        state.billTable = extra.table;
+      }
+      history.replaceState({}, "", "?" + p.toString());
+      state.view = view;
+      if (view === "kds") await loadTickets();
+      else if (view === "accounts" || view === "z") await loadSales();
+      else if (view === "bill") await loadBill();
+      else render();
+    }
+    function itemPrice(item, temp) {
+      if (item.hot != null) return temp === "Cold" ? item.cold : item.hot;
+      return item.price;
+    }
+    function addItem(item, extra) {
+      const temp = extra && extra.temp;
+      const option = extra && extra.option;
+      if (item.options && !option) {
+        state.choice[item.id] = state.choice[item.id] || item.options[0];
+        toast("Pick a drink, then tap + Tray");
+        return;
+      }
+      if (item.hot != null && !temp) {
+        toast("Choose Hot or Cold");
+        return;
+      }
+      const name = [item.name, option, temp].filter(Boolean).join(" · ");
+      const price = itemPrice(item, temp);
+      const found = state.tray.find((t) => t.name === name && t.price === price);
+      if (found) found.qty += 1;
+      else state.tray.push({ name, price, qty: 1 });
+      saveTray();
+      render();
+    }
+    function changeQty(name, delta) {
+      const row = state.tray.find((t) => t.name === name);
+      if (!row) return;
+      row.qty += delta;
+      if (row.qty <= 0) state.tray = state.tray.filter((t) => t.name !== name);
+      saveTray();
+      render();
+    }
+
+    async function submitGuest() {
+      if (!state.table) return toast("Set a table number first");
+      if (!state.tray.length) return toast("Tray is empty");
+      if (!state.orderType) {
+        state.modal = true;
+        render();
+        return toast("Choose Dine-In or Bungkus");
+      }
+      state.sending = true;
+      render();
+      const total = trayTotal();
+      const { data, error } = await sb.from("orders").insert({
+        table_number: state.table,
+        order_type: state.orderType,
+        source: "guest",
+        kitchen_notes: state.notes,
+        total,
+        status: "preparing",
+        settled: false
+      }).select("id, ticket_no, table_number").single();
+      if (error) {
+        state.sending = false;
+        render();
+        return toast(error.message);
+      }
+      const rows = state.tray.map((t) => ({
+        order_id: data.id,
+        name: t.name,
+        qty: t.qty,
+        unit_price: t.price
+      }));
+      const itemsRes = await sb.from("order_items").insert(rows);
+      state.sending = false;
+      if (itemsRes.error) return toast(itemsRes.error.message);
+      state.tray = [];
+      state.notes = "";
+      state.orderType = "";
+      state.modal = false;
+      state.lastCall = ticketCall(data);
+      saveTray();
+      toast("Sent " + state.lastCall + " to kitchen");
+      render();
+    }
+
+    function posTotal() {
+      const p = state.posProtein.reduce((s, id) => s + PROTEINS.find((x) => x.id === id).price, 0);
+      const v = state.posVeg.length * 1;
+      return p + v;
+    }
+    function toggleArr(arr, id) {
+      return arr.includes(id) ? arr.filter((x) => x !== id) : arr.concat(id);
+    }
+    async function sendPlate() {
+      if (!state.posProtein.length) return toast("Pick a protein");
+      state.sending = true;
+      render();
+      const items = [
+        ...state.posProtein.map((id) => {
+          const p = PROTEINS.find((x) => x.id === id);
+          return { name: p.name, qty: 1, unit_price: p.price };
+        }),
+        ...state.posVeg.map((id) => {
+          const v = VEGGIES.find((x) => x.id === id);
+          return { name: v.name, qty: 1, unit_price: v.price };
+        })
+      ];
+      const total = posTotal();
+      const { data, error } = await sb.from("orders").insert({
+        table_number: state.posTable,
+        order_type: state.posType,
+        source: "pos",
+        kitchen_notes: "Nasi Campur plate",
+        total,
+        status: "preparing",
+        settled: false
+      }).select("id, ticket_no, table_number").single();
+      if (error) {
+        state.sending = false;
+        render();
+        return toast(error.message);
+      }
+      const itemsRes = await sb.from("order_items").insert(items.map((i) => ({ ...i, order_id: data.id })));
+      state.sending = false;
+      if (itemsRes.error) return toast(itemsRes.error.message);
+      state.posProtein = [];
+      state.posVeg = [];
+      state.lastCall = ticketCall(data);
+      toast("Plate " + state.lastCall + " on table " + state.posTable);
+      render();
+    }
+
+    async function loadTickets() {
+      state.kdsLoading = true;
+      state.kdsError = "";
+      if (state.view === "kds") render();
+      const ordersRes = await sb.from("orders").select("*").order("created_at", { ascending: false }).limit(80);
+      if (ordersRes.error) {
+        state.kdsLoading = false;
+        state.kdsError = ordersRes.error.message;
+        state.tickets = [];
+        if (state.view === "kds") render();
+        return;
+      }
+      const orders = ordersRes.data || [];
+      const ids = orders.map((o) => o.id);
+      let items = [];
+      if (ids.length) {
+        const itemsRes = await sb.from("order_items").select("*").in("order_id", ids);
+        if (itemsRes.error) {
+          state.kdsError = itemsRes.error.message;
+        } else {
+          items = itemsRes.data || [];
+        }
+      }
+      const byOrder = {};
+      items.forEach((item) => {
+        (byOrder[item.order_id] || (byOrder[item.order_id] = [])).push(item);
+      });
+      state.tickets = orders.map((order) => ({
+        ...order,
+        status: String(order.status || "").trim(),
+        order_items: byOrder[order.id] || []
+      }));
+      state.kdsLoading = false;
+      if (state.view === "kds") render();
+    }
+    async function setStatus(id, status) {
+      await sb.from("orders").update({ status }).eq("id", id);
+      await loadTickets();
+    }
+
+    async function loadBill() {
+      state.billLoading = true;
+      state.billError = "";
+      if (state.view === "bill") render();
+      try {
+        const orders = await loadOrdersWithItems(500);
+        state.billOrders = orders.filter((o) => o.table_number === state.billTable);
+      } catch (e) {
+        state.billError = e.message || String(e);
+        state.billOrders = [];
+      }
+      state.billLoading = false;
+      if (state.view === "bill") render();
+    }
+    async function closeBill() {
+      const open = state.billOrders.filter((o) => !o.settled);
+      if (!open.length) return toast("This table bill is already closed");
+      const ids = open.map((o) => o.id);
+      const { error } = await sb.from("orders").update({ settled: true, settled_at: new Date().toISOString() }).in("id", ids);
+      if (error) return toast(error.message);
+      toast("Table " + state.billTable + " bill closed · history kept");
+      await loadBill();
+    }
+    async function loadDayClose() {
+      const today = businessDate();
+      const { data } = await sb.from("day_closes").select("*").eq("business_date", today).maybeSingle();
+      state.dayClose = data || null;
+    }
+    async function closeDay() {
+      const rows = todayRows();
+      const dine = rows.filter((r) => r.order_type === "dine_in").reduce((s, r) => s + r.line_total, 0);
+      const bung = rows.filter((r) => r.order_type === "bungkus").reduce((s, r) => s + r.line_total, 0);
+      const revenue = dine + bung;
+      const payload = {
+        business_date: businessDate(),
+        dine_in_total: Math.round(dine * 100) / 100,
+        bungkus_total: Math.round(bung * 100) / 100,
+        line_count: rows.length,
+        revenue: Math.round(revenue * 100) / 100,
+        note: "Z-report"
+      };
+      const { error } = await sb.from("day_closes").upsert(payload, { onConflict: "business_date" });
+      if (error) return toast(error.message);
+      toast("Day closed · " + payload.business_date + " · " + money(payload.revenue));
+      await loadDayClose();
+      render();
+    }
+
+    function csvCell(v) {
+      const s = String(v == null ? "" : v);
+      if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+    function salesFiltered() {
+      return state.salesRows.filter((r) => {
+        const day = r.business_date || businessDate(r.datetime);
+        if (state.salesFrom && day < state.salesFrom) return false;
+        if (state.salesTo && day > state.salesTo) return false;
+        return true;
+      });
+    }
+    function todayRows() {
+      const today = businessDate();
+      return state.salesRows.filter((r) => (r.business_date || businessDate(r.datetime)) === today);
+    }
+    async function loadOrdersWithItems(limit) {
+      const ordersRes = await sb.from("orders").select("*").order("created_at", { ascending: false }).limit(limit || 400);
+      if (ordersRes.error) throw new Error(ordersRes.error.message);
+      const orders = ordersRes.data || [];
+      const ids = orders.map((o) => o.id);
+      let items = [];
+      if (ids.length) {
+        const itemsRes = await sb.from("order_items").select("*").in("order_id", ids);
+        if (itemsRes.error) throw new Error(itemsRes.error.message);
+        items = itemsRes.data || [];
+      }
+      const byOrder = {};
+      items.forEach((item) => {
+        (byOrder[item.order_id] || (byOrder[item.order_id] = [])).push(item);
+      });
+      return orders.map((order) => ({
+        ...order,
+        status: String(order.status || "").trim(),
+        order_items: byOrder[order.id] || []
+      }));
+    }
+    async function loadSales() {
+      state.salesLoading = true;
+      state.salesError = "";
+      if (state.view === "accounts" || state.view === "z") render();
+      try {
+        const orders = await loadOrdersWithItems(500);
+        const rows = [];
+        orders.forEach((order) => {
+          (order.order_items || []).forEach((item) => {
+            const qty = Number(item.qty) || 0;
+            const unit = Number(item.unit_price) || 0;
+            rows.push({
+              datetime: order.created_at,
+              business_date: businessDate(order.created_at),
+              table: order.table_number,
+              source: order.source,
+              order_type: order.order_type,
+              item_name: item.name,
+              qty,
+              unit_price: unit,
+              line_total: Math.round(qty * unit * 100) / 100,
+              order_id: order.id,
+              ticket_no: order.ticket_no,
+              ticket: ticketCall(order),
+              settled: !!order.settled,
+              status: order.status,
+              kitchen_notes: order.kitchen_notes || ""
+            });
+          });
+        });
+        rows.sort((a, b) => String(b.datetime).localeCompare(String(a.datetime)));
+        state.salesRows = rows;
+      } catch (e) {
+        state.salesError = e.message || String(e);
+        state.salesRows = [];
+      }
+      await loadDayClose();
+      state.salesLoading = false;
+      if (state.view === "accounts" || state.view === "z") render();
+    }
+    function exportSalesCsv() {
+      const rows = salesFiltered();
+      const headers = ["datetime", "ticket", "table", "source", "order_type", "item_name", "qty", "unit_price", "line_total", "order_id", "status", "settled", "kitchen_notes"];
+      const lines = [headers.join(",")].concat(rows.map((r) => headers.map((h) => {
+        if (h === "unit_price" || h === "line_total") return Number(r[h]).toFixed(2);
+        return csvCell(r[h]);
+      }).join(",")));
+      const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "aims-sales-" + (state.salesFrom || "all") + "-to-" + (state.salesTo || "all") + ".csv";
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast("Exported " + rows.length + " sold lines");
+    }
+
+    function nav() {
+      const btn = (view, label, icon) => `
+        <button data-go="${view}" class="px-3 py-2 rounded-full text-sm ${state.view === view ? "bg-ink text-kraft" : "bg-white/70"}">
+          <i class="fa-solid ${icon} mr-1"></i>${label}
+        </button>`;
+      return `
+        <header class="sticky top-0 z-30 backdrop-blur bg-kraft/80 border-b border-ink/10">
+          <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+            <div>
+              <p class="text-[11px] tracking-[0.25em] uppercase text-teak">Aims Solution</p>
+              <h1 class="font-display text-2xl leading-none">IFM Kopitiam</h1>
+              <p class="text-[10px] text-ink/50">${esc(backendLabel)}</p>
+            </div>
+            <nav class="flex flex-wrap gap-1 justify-end">${btn("menu", "Menu", "fa-utensils")}${btn("pos", "POS", "fa-cash-register")}${btn("kds", "KDS", "fa-fire-burner")}${btn("bill", "Bills", "fa-receipt")}${btn("z", "Z", "fa-chart-simple")}${btn("accounts", "Accts", "fa-file-csv")}</nav>
+          </div>
+        </header>`;
+    }
+
+    function toastEl() {
+      if (!state.toast) return "";
+      return `<div class="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-ink text-kraft px-4 py-2 rounded-full text-sm">${esc(state.toast)}</div>`;
+    }
+    function lastCallBanner() {
+      if (!state.lastCall) return "";
+      return `<div class="max-w-5xl mx-auto px-4 pt-4">
+        <div class="bg-pandan text-white rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
+          <p class="font-bold">Kitchen ticket ${esc(state.lastCall)}</p>
+          <button id="clear-call" class="text-sm underline">OK</button>
+        </div>
+      </div>`;
+    }
+
+    function renderMenu() {
+      const q = state.q.toLowerCase();
+      const cats = MENU.filter((c) => state.cat === "All" || c.cat === state.cat);
+      const cards = cats.map((c) => {
+        const items = c.items.filter((i) => !q || i.name.toLowerCase().includes(q) || (i.desc || "").toLowerCase().includes(q));
+        if (!items.length) return "";
+        return `
+          <section class="mb-8">
+            <h2 class="font-display text-3xl mb-3">${c.cat}</h2>
+            <div class="grid sm:grid-cols-2 gap-3">
+              ${items.map((item) => {
+                const choice = state.choice[item.id] || (item.options && item.options[0]) || "";
+                const temp = state.choice[item.id + "-t"] || "Hot";
+                return `
+                  <article class="bg-white/80 border border-ink/10 rounded-2xl p-4">
+                    <div class="flex justify-between gap-3">
+                      <div>
+                        <h3 class="font-bold text-lg">${item.name}</h3>
+                        ${item.desc ? `<p class="text-sm text-ink/70">${item.desc}</p>` : ""}
+                      </div>
+                      <p class="font-display text-xl">${item.hot != null ? money(item.hot) + " / " + money(item.cold) : money(item.price)}</p>
+                    </div>
+                    ${item.options ? `<div class="flex flex-wrap gap-2 mt-3">${item.options.map((o) => `<button data-choice="${item.id}" data-val="${o}" class="text-xs px-2 py-1 rounded-full border ${choice === o ? "chip-on" : "border-ink/20"}">${o}</button>`).join("")}</div>` : ""}
+                    ${item.hot != null ? `<div class="flex gap-2 mt-3">${["Hot", "Cold"].map((t) => `<button data-temp="${item.id}" data-val="${t}" class="text-xs px-2 py-1 rounded-full border ${temp === t ? "chip-on" : "border-ink/20"}">${t}</button>`).join("")}</div>` : ""}
+                    <button data-add="${item.id}" class="mt-3 w-full bg-chili text-white rounded-xl py-2 text-sm font-bold">+ Add to Tray</button>
+                  </article>`;
+              }).join("")}
+            </div>
+          </section>`;
+      }).join("");
+
+      return `
+        ${nav()}
+        ${lastCallBanner()}
+        <main class="max-w-5xl mx-auto px-4 pb-52 pt-6">
+          <div class="flex flex-wrap items-center gap-3 mb-5">
+            <label class="text-sm">Table
+              <select id="table-select" class="ml-2 bg-white rounded-lg px-2 py-1 border border-ink/20">
+                <option value="">Select</option>
+                ${TABLES.map((t) => `<option value="${t}" ${state.table === t ? "selected" : ""}>${t}</option>`).join("")}
+              </select>
+            </label>
+            <input id="search" value="${state.q}" placeholder="Search menu" class="flex-1 min-w-[160px] bg-white rounded-lg px-3 py-2 border border-ink/20" />
+          </div>
+          <div class="flex gap-2 overflow-x-auto pb-3 mb-4">
+            ${CATS.map((c) => `<button data-cat="${c}" class="whitespace-nowrap px-3 py-1 rounded-full border ${state.cat === c ? "chip-on" : "bg-white border-ink/15"}">${c}</button>`).join("")}
+          </div>
+          ${cards || `<p>No dishes match that search.</p>`}
+        </main>
+        <div class="fixed bottom-0 inset-x-0 z-40 border-t-4 border-chili bg-kraft/95 px-4 py-3">
+          <p class="text-center font-bold text-sm mb-2">How do you want this order?</p>
+          <div class="max-w-md mx-auto grid grid-cols-2 gap-2 mb-2">
+            <button data-type="dine_in" class="py-3 rounded-2xl font-bold text-lg ${state.orderType === "dine_in" ? "bg-pandan text-white" : "bg-white border-2 border-ink/20"}">Dine-In</button>
+            <button data-type="bungkus" class="py-3 rounded-2xl font-bold text-lg ${state.orderType === "bungkus" ? "bg-chili text-white" : "bg-white border-2 border-ink/20"}">Bungkus</button>
+          </div>
+          <button id="open-tray" class="max-w-md mx-auto block w-full bg-ink text-kraft rounded-2xl px-4 py-3 font-bold">
+            <i class="fa-solid fa-bowl-food mr-2"></i>Checkout tray ${trayCount()} · ${money(trayTotal())}${state.orderType ? " · " + (state.orderType === "bungkus" ? "Bungkus" : "Dine-In") : ""}
+          </button>
+        </div>
+        ${state.modal ? trayModal() : ""}
+        ${toastEl()}`;
+    }
+
+    function trayModal() {
+      return `
+        <div id="tray-backdrop" class="fixed inset-0 bg-ink/50 z-50 flex items-end sm:items-center justify-center p-4">
+          <div class="bg-kraft w-full max-w-md rounded-3xl p-5">
+            <div class="flex justify-between items-center mb-3">
+              <h3 class="font-display text-2xl">Table ${state.table || "--"} tray</h3>
+              <button id="close-tray"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            ${state.tray.length ? state.tray.map((t) => `
+              <div class="flex items-center justify-between py-2 border-b border-ink/10">
+                <div><p class="font-bold">${t.name}</p><p class="text-sm">${money(t.price)}</p></div>
+                <div class="flex items-center gap-2">
+                  <button data-minus="${t.name}" class="w-8 h-8 rounded-full bg-white">-</button>
+                  <span>${t.qty}</span>
+                  <button data-plus="${t.name}" class="w-8 h-8 rounded-full bg-white">+</button>
+                </div>
+              </div>`).join("") : `<p class="text-ink/70">Nothing in the tray yet.</p>`}
+            <p class="mt-4 font-bold">Dine-In or Bungkus <span class="text-chili">*</span></p>
+            <p class="text-xs text-ink/60 mb-2">Required before sending to the kitchen.</p>
+            <div class="grid grid-cols-2 gap-2">
+              <button data-type="dine_in" class="py-4 rounded-2xl font-bold text-lg ${state.orderType === "dine_in" ? "bg-pandan text-white" : "bg-white border-2 border-ink/20"}">Dine-In</button>
+              <button data-type="bungkus" class="py-4 rounded-2xl font-bold text-lg ${state.orderType === "bungkus" ? "bg-chili text-white" : "bg-white border-2 border-ink/20"}">Bungkus</button>
+            </div>
+            <textarea id="notes" class="w-full mt-3 rounded-xl p-3 text-sm" placeholder="Kitchen notes">${esc(state.notes)}</textarea>
+            <button id="send-order" class="mt-3 w-full ${state.orderType ? "bg-chili text-white" : "bg-ink/20 text-ink/50"} rounded-xl py-3 font-bold" ${state.sending || !state.orderType ? "disabled" : ""}>
+              ${state.orderType ? "Send " + (state.orderType === "bungkus" ? "Bungkus" : "Dine-In") + " · " + money(trayTotal()) : "Pick Dine-In or Bungkus first"}
+            </button>
+          </div>
+        </div>`;
+    }
+
+    function renderPos() {
+      return `
+        ${nav()}
+        ${lastCallBanner()}
+        <main class="max-w-5xl mx-auto px-4 py-6">
+          <p class="uppercase tracking-[0.2em] text-teak text-xs">Nasi Campur counter</p>
+          <h2 class="font-display text-4xl mb-4">3-second plate</h2>
+          <p class="mb-4 text-sm">Tap protein and $1.00 sides, then send to the table bill. No rice charge.</p>
+          <div class="grid grid-cols-5 sm:grid-cols-10 gap-2 mb-4">
+            ${TABLES.map((t) => `<button data-pos-table="${t}" class="py-2 rounded-lg ${state.posTable === t ? "bg-ink text-kraft" : "bg-white"}">${t}</button>`).join("")}
+          </div>
+          <div class="flex gap-2 mb-5">
+            <button data-pos-type="dine_in" class="px-4 py-2 rounded-xl ${state.posType === "dine_in" ? "bg-pandan text-white" : "bg-white"}">Dine-In</button>
+            <button data-pos-type="bungkus" class="px-4 py-2 rounded-xl ${state.posType === "bungkus" ? "bg-chili text-white" : "bg-white"}">Bungkus</button>
+          </div>
+          <h3 class="font-bold mb-2">Protein</h3>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-5">
+            ${PROTEINS.map((p) => `<button data-pro="${p.id}" class="p-4 rounded-2xl text-left ${state.posProtein.includes(p.id) ? "bg-chili text-white" : "bg-white"}"><span class="block font-bold">${p.name}</span>${money(p.price)}</button>`).join("")}
+          </div>
+          <h3 class="font-bold mb-2">Veggie / add-on · $1.00</h3>
+          <div class="flex flex-wrap gap-2 mb-8">
+            ${VEGGIES.map((v) => `<button data-veg="${v.id}" class="px-4 py-2 rounded-full ${state.posVeg.includes(v.id) ? "chip-on" : "bg-white"}">${v.name}</button>`).join("")}
+          </div>
+          <button id="send-plate" class="w-full bg-ink text-kraft rounded-2xl py-4 text-xl font-display ticket" ${state.sending ? "disabled" : ""}>
+            Send plate · Table ${state.posTable} · ${money(posTotal())}
+          </button>
+          <button data-go="bill" data-bill-jump="${state.posTable}" class="mt-3 w-full bg-white rounded-2xl py-3 font-bold">Open Table ${state.posTable} bill</button>
+        </main>
+        ${toastEl()}`;
+    }
+
+    function renderKds() {
+      const list = state.tickets.filter((t) => state.kdsFilter === "all" || t.status === state.kdsFilter);
+      const next = { preparing: "ready", ready: "done" };
+      return `
+        ${nav()}
+        <main class="max-w-6xl mx-auto px-4 py-6">
+          <h2 class="font-display text-4xl mb-4">Kitchen</h2>
+          <div class="flex gap-2 mb-5">
+            ${["preparing", "ready", "done", "all"].map((f) => `<button data-kds="${f}" class="px-3 py-1 rounded-full capitalize ${state.kdsFilter === f ? "chip-on" : "bg-white"}">${f}</button>`).join("")}
+          </div>
+          <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            ${state.kdsLoading ? `<p>Loading tickets…</p>` : state.kdsError ? `<p class="text-chili">${esc(state.kdsError)}</p>` : list.map((t) => `
+              <article class="bg-white rounded-2xl p-4 ticket ${t.status === "preparing" ? "border-2 border-chili" : ""}">
+                <div class="flex justify-between items-start gap-2">
+                  <p class="font-display text-3xl leading-none">${esc(ticketCall(t))}</p>
+                  <p class="text-xs uppercase text-right">${typeLabel(t.order_type)} · ${t.source}</p>
+                </div>
+                <ul class="mt-2 text-sm space-y-1">
+                  ${(t.order_items || []).map((i) => `<li>${i.qty} × ${i.name}</li>`).join("")}
+                </ul>
+                ${t.kitchen_notes ? `<p class="mt-2 text-chili text-sm">${esc(t.kitchen_notes)}</p>` : ""}
+                <p class="mt-2 font-bold">${money(t.total)}</p>
+                ${next[t.status] ? `<button data-status="${t.id}" data-next="${next[t.status]}" class="mt-3 w-full bg-ink text-kraft rounded-xl py-2 capitalize">${t.status} → ${next[t.status]}</button>` : `<p class="mt-3 text-pandan text-sm">Done</p>`}
+              </article>`).join("") || `<p>No tickets in this lane.</p>`}
+          </div>
+        </main>
+        ${toastEl()}`;
+    }
+
+    function renderAccounts() {
+      const rows = salesFiltered();
+      const sum = rows.reduce((s, r) => s + r.line_total, 0);
+      return `
+        ${nav()}
+        <main class="max-w-6xl mx-auto px-4 py-6">
+          <h2 class="font-display text-4xl mb-1">Accounting</h2>
+          <p class="text-sm mb-4">Sold item lines from guest ala carte and POS Nasi Campur. Same ledger as kitchen tickets.</p>
+          <div class="flex flex-wrap items-end gap-3 mb-4">
+            <label class="text-sm">From
+              <input id="sales-from" type="date" value="${state.salesFrom}" class="ml-2 bg-white rounded-lg px-2 py-1 border border-ink/20" />
+            </label>
+            <label class="text-sm">To
+              <input id="sales-to" type="date" value="${state.salesTo}" class="ml-2 bg-white rounded-lg px-2 py-1 border border-ink/20" />
+            </label>
+            <button id="sales-refresh" class="px-3 py-2 rounded-xl bg-white border border-ink/20 text-sm">Refresh</button>
+            <button id="sales-export" class="px-3 py-2 rounded-xl bg-ink text-kraft text-sm font-bold">Export Excel CSV</button>
+            <p class="text-sm">${rows.length} lines · ${money(sum)}</p>
+          </div>
+          ${state.salesLoading ? `<p>Loading sales…</p>` : state.salesError ? `<p class="text-chili">${esc(state.salesError)}</p>` : `
+          <div class="overflow-x-auto bg-white/80 rounded-2xl border border-ink/10">
+            <table class="min-w-full text-sm">
+              <thead class="bg-ink text-kraft text-left">
+                <tr>
+                  <th class="px-3 py-2">Datetime</th>
+                  <th class="px-3 py-2">Ticket</th>
+                  <th class="px-3 py-2">Table</th>
+                  <th class="px-3 py-2">Source</th>
+                  <th class="px-3 py-2">Type</th>
+                  <th class="px-3 py-2">Item</th>
+                  <th class="px-3 py-2">Qty</th>
+                  <th class="px-3 py-2">Unit</th>
+                  <th class="px-3 py-2">Line</th>
+                  <th class="px-3 py-2">Status</th>
+                  <th class="px-3 py-2">Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                  ${rows.map((r) => `
+                  <tr class="border-t border-ink/10">
+                    <td class="px-3 py-2 whitespace-nowrap">${esc(r.datetime)}</td>
+                    <td class="px-3 py-2">${esc(r.ticket || "")}</td>
+                    <td class="px-3 py-2">${esc(r.table)}</td>
+                    <td class="px-3 py-2">${esc(r.source)}</td>
+                    <td class="px-3 py-2">${esc((r.order_type || "").replace("_", "-"))}</td>
+                    <td class="px-3 py-2">${esc(r.item_name)}</td>
+                    <td class="px-3 py-2">${r.qty}</td>
+                    <td class="px-3 py-2">${money(r.unit_price)}</td>
+                    <td class="px-3 py-2 font-bold">${money(r.line_total)}</td>
+                    <td class="px-3 py-2">${esc(r.status)}</td>
+                    <td class="px-3 py-2">${esc(r.kitchen_notes)}</td>
+                  </tr>`).join("") || `<tr><td class="px-3 py-4" colspan="11">No sold lines in this date range.</td></tr>`}
+              </tbody>
+            </table>
+          </div>`}
+        </main>
+        ${toastEl()}`;
+    }
+
+    function flattenOrders(orders) {
+      const rows = [];
+      (orders || []).forEach((order) => {
+        (order.order_items || []).forEach((item) => {
+          const qty = Number(item.qty) || 0;
+          const unit = Number(item.unit_price) || 0;
+          rows.push({
+            ticket: ticketCall(order),
+            source: order.source,
+            order_type: order.order_type,
+            name: item.name,
+            qty,
+            unit,
+            line: Math.round(qty * unit * 100) / 100,
+            settled: !!order.settled
+          });
+        });
+      });
+      return rows;
+    }
+    function renderBill() {
+      const open = state.billOrders.filter((o) => !o.settled);
+      const closed = state.billOrders.filter((o) => o.settled);
+      const openLines = flattenOrders(open);
+      const closedLines = flattenOrders(closed);
+      const total = openLines.reduce((s, r) => s + r.line, 0);
+      const lineRow = (r) => `
+        <tr class="border-t border-ink/10 ${r.settled ? "opacity-50" : ""}">
+          <td class="px-3 py-2 font-bold">${esc(r.ticket)}</td>
+          <td class="px-3 py-2">${esc(r.source)}</td>
+          <td class="px-3 py-2">${typeLabel(r.order_type)}</td>
+          <td class="px-3 py-2">${esc(r.name)}</td>
+          <td class="px-3 py-2">${r.qty}</td>
+          <td class="px-3 py-2">${money(r.unit)}</td>
+          <td class="px-3 py-2 font-bold">${money(r.line)}</td>
+        </tr>`;
+      return `
+        ${nav()}
+        <main class="max-w-6xl mx-auto px-4 py-6">
+          <h2 class="font-display text-4xl mb-1">Table bills</h2>
+          <p class="text-sm mb-4">Master bill combines guest à la carte and Nasi Campur POS. Close bill settles the table without taking a payment method. Sold lines stay in accounting.</p>
+          <div class="grid grid-cols-5 sm:grid-cols-10 gap-2 mb-5">
+            ${TABLES.map((t) => `<button data-bill-table="${t}" class="py-2 rounded-lg ${state.billTable === t ? "bg-ink text-kraft" : "bg-white"}">${t}</button>`).join("")}
+          </div>
+          ${state.billLoading ? `<p>Loading bill…</p>` : state.billError ? `<p class="text-chili">${esc(state.billError)}</p>` : `
+          <section class="bg-white/80 rounded-2xl border border-ink/10 p-4 mb-5">
+            <div class="flex flex-wrap justify-between gap-3 items-end mb-3">
+              <div>
+                <p class="uppercase tracking-[0.2em] text-teak text-xs">Open bill</p>
+                <h3 class="font-display text-3xl">Table ${esc(state.billTable)}</h3>
+              </div>
+              <p class="font-display text-4xl">${money(total)}</p>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="min-w-full text-sm">
+                <thead class="text-left text-ink/60">
+                  <tr><th class="px-3 py-2">Ticket</th><th class="px-3 py-2">Source</th><th class="px-3 py-2">Type</th><th class="px-3 py-2">Item</th><th class="px-3 py-2">Qty</th><th class="px-3 py-2">Unit</th><th class="px-3 py-2">Line</th></tr>
+                </thead>
+                <tbody>
+                  ${openLines.map(lineRow).join("") || `<tr><td class="px-3 py-4" colspan="7">No open items. New guest or POS orders will land here.</td></tr>`}
+                </tbody>
+              </table>
+            </div>
+            <button id="close-bill" class="mt-4 w-full bg-chili text-white rounded-2xl py-3 font-bold" ${!openLines.length ? "disabled" : ""}>Close bill · Table ${esc(state.billTable)} · ${money(total)}</button>
+          </section>
+          ${closedLines.length ? `
+          <section>
+            <h3 class="font-bold mb-2">Settled this table (kept for accounts)</h3>
+            <div class="overflow-x-auto bg-white/60 rounded-2xl border border-ink/10">
+              <table class="min-w-full text-sm">
+                <thead class="text-left text-ink/60">
+                  <tr><th class="px-3 py-2">Ticket</th><th class="px-3 py-2">Source</th><th class="px-3 py-2">Type</th><th class="px-3 py-2">Item</th><th class="px-3 py-2">Qty</th><th class="px-3 py-2">Unit</th><th class="px-3 py-2">Line</th></tr>
+                </thead>
+                <tbody>${closedLines.map(lineRow).join("")}</tbody>
+              </table>
+            </div>
+          </section>` : ""}`}
+        </main>
+        ${toastEl()}`;
+    }
+    function renderZ() {
+      const rows = todayRows();
+      const byItem = {};
+      rows.forEach((r) => {
+        const key = r.item_name;
+        if (!byItem[key]) byItem[key] = { name: key, qty: 0, revenue: 0 };
+        byItem[key].qty += r.qty;
+        byItem[key].revenue += r.line_total;
+      });
+      const items = Object.values(byItem).sort((a, b) => b.revenue - a.revenue);
+      const dine = rows.filter((r) => r.order_type === "dine_in").reduce((s, r) => s + r.line_total, 0);
+      const bung = rows.filter((r) => r.order_type === "bungkus").reduce((s, r) => s + r.line_total, 0);
+      const revenue = dine + bung;
+      const today = businessDate();
+      return `
+        ${nav()}
+        <main class="max-w-6xl mx-auto px-4 py-6">
+          <h2 class="font-display text-4xl mb-1">Z-report</h2>
+          <p class="text-sm mb-4">Today ${esc(today)} (Singapore). Close day stamps this snapshot. Sold lines stay exportable.</p>
+          ${state.dayClose ? `<p class="mb-4 text-pandan font-bold">Day closed ${esc(state.dayClose.closed_at)} · ${money(state.dayClose.revenue)}</p>` : `<p class="mb-4 text-sm text-ink/70">Day still open.</p>`}
+          <div class="grid sm:grid-cols-3 gap-3 mb-5">
+            <div class="bg-white rounded-2xl p-4"><p class="text-xs uppercase text-teak">Dine-In</p><p class="font-display text-3xl">${money(dine)}</p></div>
+            <div class="bg-white rounded-2xl p-4"><p class="text-xs uppercase text-teak">Bungkus</p><p class="font-display text-3xl">${money(bung)}</p></div>
+            <div class="bg-white rounded-2xl p-4"><p class="text-xs uppercase text-teak">Revenue</p><p class="font-display text-3xl">${money(revenue)}</p></div>
+          </div>
+          <div class="flex flex-wrap gap-2 mb-4">
+            <button id="z-refresh" class="px-3 py-2 rounded-xl bg-white border border-ink/20 text-sm">Refresh</button>
+            <button id="z-export" class="px-3 py-2 rounded-xl bg-ink text-kraft text-sm font-bold">Export today CSV</button>
+            <button id="close-day" class="px-3 py-2 rounded-xl bg-chili text-white text-sm font-bold">Close day</button>
+          </div>
+          ${state.salesLoading ? `<p>Loading…</p>` : state.salesError ? `<p class="text-chili">${esc(state.salesError)}</p>` : `
+          <div class="overflow-x-auto bg-white/80 rounded-2xl border border-ink/10">
+            <table class="min-w-full text-sm">
+              <thead class="bg-ink text-kraft text-left"><tr><th class="px-3 py-2">Item</th><th class="px-3 py-2">Qty</th><th class="px-3 py-2">Revenue</th></tr></thead>
+              <tbody>
+                ${items.map((i) => `<tr class="border-t border-ink/10"><td class="px-3 py-2">${esc(i.name)}</td><td class="px-3 py-2">${i.qty}</td><td class="px-3 py-2 font-bold">${money(i.revenue)}</td></tr>`).join("") || `<tr><td class="px-3 py-4" colspan="3">No sales yet today.</td></tr>`}
+              </tbody>
+            </table>
+          </div>`}
+        </main>
+        ${toastEl()}`;
+    }
+
+    function render() {
+      const root = document.getElementById("app");
+      if (state.view === "pos") root.innerHTML = renderPos();
+      else if (state.view === "kds") root.innerHTML = renderKds();
+      else if (state.view === "accounts") root.innerHTML = renderAccounts();
+      else if (state.view === "bill") root.innerHTML = renderBill();
+      else if (state.view === "z") root.innerHTML = renderZ();
+      else root.innerHTML = renderMenu();
+      bind();
+    }
+
+    function bind() {
+      document.querySelectorAll("[data-go]").forEach((b) => b.onclick = () => {
+        if (b.dataset.billJump) return setView("bill", { table: b.dataset.billJump });
+        setView(b.dataset.go);
+      });
+      const clearCall = document.getElementById("clear-call");
+      if (clearCall) clearCall.onclick = () => { state.lastCall = ""; render(); };
+      const tableSelect = document.getElementById("table-select");
+      if (tableSelect) tableSelect.onchange = () => {
+        state.table = tableSelect.value;
+        const p = new URLSearchParams(location.search);
+        if (state.table) p.set("table", state.table); else p.delete("table");
+        p.set("view", "menu");
+        history.replaceState({}, "", "?" + p.toString());
+        loadTray();
+        render();
+      };
+      const search = document.getElementById("search");
+      if (search) search.oninput = () => { state.q = search.value; render(); search.focus(); search.setSelectionRange(state.q.length, state.q.length); };
+      document.querySelectorAll("[data-cat]").forEach((b) => b.onclick = () => { state.cat = b.dataset.cat; render(); });
+      document.querySelectorAll("[data-choice]").forEach((b) => b.onclick = () => { state.choice[b.dataset.choice] = b.dataset.val; render(); });
+      document.querySelectorAll("[data-temp]").forEach((b) => b.onclick = () => { state.choice[b.dataset.temp + "-t"] = b.dataset.val; render(); });
+      document.querySelectorAll("[data-add]").forEach((b) => b.onclick = () => {
+        const item = MENU.flatMap((c) => c.items).find((i) => i.id === b.dataset.add);
+        addItem(item, {
+          option: item.options ? (state.choice[item.id] || item.options[0]) : undefined,
+          temp: item.hot != null ? (state.choice[item.id + "-t"] || "Hot") : undefined
+        });
+      });
+      const openTray = document.getElementById("open-tray");
+      if (openTray) openTray.onclick = () => { state.modal = true; render(); };
+      const closeTray = document.getElementById("close-tray");
+      if (closeTray) closeTray.onclick = () => { state.modal = false; render(); };
+      const backdrop = document.getElementById("tray-backdrop");
+      if (backdrop) backdrop.onclick = (e) => { if (e.target.id === "tray-backdrop") { state.modal = false; render(); } };
+      document.querySelectorAll("[data-minus]").forEach((b) => b.onclick = () => changeQty(b.dataset.minus, -1));
+      document.querySelectorAll("[data-plus]").forEach((b) => b.onclick = () => changeQty(b.dataset.plus, 1));
+      document.querySelectorAll("[data-type]").forEach((b) => b.onclick = () => { state.orderType = b.dataset.type; render(); });
+      const notes = document.getElementById("notes");
+      if (notes) notes.oninput = () => { state.notes = notes.value; };
+      const send = document.getElementById("send-order");
+      if (send) send.onclick = submitGuest;
+      document.querySelectorAll("[data-pos-table]").forEach((b) => b.onclick = () => { state.posTable = b.dataset.posTable; render(); });
+      document.querySelectorAll("[data-pos-type]").forEach((b) => b.onclick = () => { state.posType = b.dataset.posType; render(); });
+      document.querySelectorAll("[data-pro]").forEach((b) => b.onclick = () => { state.posProtein = toggleArr(state.posProtein, b.dataset.pro); render(); });
+      document.querySelectorAll("[data-veg]").forEach((b) => b.onclick = () => { state.posVeg = toggleArr(state.posVeg, b.dataset.veg); render(); });
+      const sendPlateBtn = document.getElementById("send-plate");
+      if (sendPlateBtn) sendPlateBtn.onclick = sendPlate;
+      document.querySelectorAll("[data-kds]").forEach((b) => b.onclick = () => { state.kdsFilter = b.dataset.kds; render(); });
+      document.querySelectorAll("[data-status]").forEach((b) => b.onclick = () => setStatus(b.dataset.status, b.dataset.next));
+      const salesFrom = document.getElementById("sales-from");
+      if (salesFrom) salesFrom.onchange = () => { state.salesFrom = salesFrom.value; render(); };
+      const salesTo = document.getElementById("sales-to");
+      if (salesTo) salesTo.onchange = () => { state.salesTo = salesTo.value; render(); };
+      const salesRefresh = document.getElementById("sales-refresh");
+      if (salesRefresh) salesRefresh.onclick = () => loadSales();
+      const salesExport = document.getElementById("sales-export");
+      if (salesExport) salesExport.onclick = exportSalesCsv;
+      document.querySelectorAll("[data-bill-table]").forEach((b) => b.onclick = () => {
+        state.billTable = b.dataset.billTable;
+        const p = new URLSearchParams(location.search);
+        p.set("view", "bill");
+        p.set("table", state.billTable);
+        history.replaceState({}, "", "?" + p.toString());
+        loadBill();
+      });
+      const closeBillBtn = document.getElementById("close-bill");
+      if (closeBillBtn) closeBillBtn.onclick = closeBill;
+      const zRefresh = document.getElementById("z-refresh");
+      if (zRefresh) zRefresh.onclick = () => loadSales();
+      const zExport = document.getElementById("z-export");
+      if (zExport) zExport.onclick = () => {
+        const keepFrom = state.salesFrom;
+        const keepTo = state.salesTo;
+        const today = businessDate();
+        state.salesFrom = today;
+        state.salesTo = today;
+        exportSalesCsv();
+        state.salesFrom = keepFrom;
+        state.salesTo = keepTo;
+      };
+      const closeDayBtn = document.getElementById("close-day");
+      if (closeDayBtn) closeDayBtn.onclick = closeDay;
+    }
+
+    async function connectBackend() {
+      try {
+        const probe = await fetch(LOCAL_URL + "/rest/v1/", {
+          headers: { apikey: LOCAL_ANON, Authorization: "Bearer " + LOCAL_ANON }
+        });
+        if (probe.ok) {
+          sb = supabase.createClient(LOCAL_URL, LOCAL_ANON);
+          backendLabel = "local supabase :54321";
+          return;
+        }
+      } catch (e) {}
+      sb = supabase.createClient(REMOTE_URL, REMOTE_ANON);
+      backendLabel = "local app · hosted supabase";
+    }
+
+    async function boot() {
+      await connectBackend();
+      sb.channel("kds-live")
+        .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => {
+          if (state.view === "kds") loadTickets();
+          if (state.view === "accounts" || state.view === "z") loadSales();
+          if (state.view === "bill") loadBill();
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, () => {
+          if (state.view === "kds") loadTickets();
+          if (state.view === "accounts" || state.view === "z") loadSales();
+          if (state.view === "bill") loadBill();
+        })
+        .subscribe();
+      loadTray();
+      if (!state.salesFrom) {
+        const today = businessDate();
+        const from = new Date();
+        from.setDate(from.getDate() - 29);
+        state.salesFrom = businessDate(from.toISOString());
+        state.salesTo = today;
+      }
+      if (state.view === "kds") await loadTickets();
+      else if (state.view === "accounts" || state.view === "z") await loadSales();
+      else if (state.view === "bill") await loadBill();
+      else render();
+    }
+    boot();
+  </script>
+</body>
+</html>
