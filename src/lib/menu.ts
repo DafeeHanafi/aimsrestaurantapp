@@ -73,28 +73,59 @@ export const MENU: MenuCategory[] = [
       { id: "lemon-tea", name: "Lemon Tea", hot: 1.7, cold: 2.0 },
       { id: "kasturi", name: "Kasturi", hot: 1.5, cold: 1.8 },
       { id: "lemon", name: "Lemon", hot: 1.5, cold: 1.5 },
-      { id: "longan", name: "Longan", price: 2.0 },
-      { id: "longan-milk", name: "Longan w/ Milk", price: 2.2 },
-      { id: "bandung", name: "Bandung (Rose Milk)", price: 1.5 },
-      { id: "banana-lemon", name: "Banana Lemon (Cordial)", price: 1.2 },
-      { id: "rose-lemon", name: "Rose Lemon (Cordial)", price: 1.2 }
+      { id: "longan", name: "Longan", price: 2.0, canned: true },
+      { id: "longan-milk", name: "Longan w/ Milk", price: 2.2, canned: true },
+      { id: "bandung", name: "Bandung (Rose Milk)", price: 1.5, canned: true },
+      { id: "banana-lemon", name: "Banana Lemon (Cordial)", price: 1.2, canned: true },
+      { id: "rose-lemon", name: "Rose Lemon (Cordial)", price: 1.2, canned: true }
     ]
   }
 ];
 
-export const PROTEINS = [
-  { id: "ayam-merah", name: "Ayam Merah", price: 2.0 },
-  { id: "daging-rendang", name: "Daging Rendang", price: 3.0 },
+export const EXTRA = 0.5;
+export const PACKING = 0.3;
+export const PACKING_NAME = "Bungkus packing (plastic / container)";
+
+export type CampurItem = {
+  id: string;
+  name: string;
+  price: number;
+  extra?: boolean;
+};
+
+export const PROTEINS: CampurItem[] = [
+  { id: "ayam", name: "Ayam", price: 2.0, extra: true },
+  { id: "daging", name: "Daging", price: 3.0, extra: true },
   { id: "ikan", name: "Ikan", price: 2.0 },
-  { id: "ayam-goreng", name: "Ayam Goreng", price: 2.0 },
-  { id: "sambal-udang", name: "Sambal Udang", price: 3.0 }
+  { id: "ayam-grill", name: "Ayam grill (whole leg)", price: 3.5, extra: true },
+  { id: "sambal-pusu", name: "Sambal Pusu", price: 3.0, extra: true }
 ];
 
-export const VEGGIES = ["Kangkung", "Taugeh", "Sambal", "Acar", "Telur Mata"].map((name) => ({
-  id: name.toLowerCase().replace(/\s+/g, "-"),
-  name,
-  price: 1.0
-}));
+export const VEGGIES: CampurItem[] = [
+  { id: "veggie-condiments", name: "Veggie and condiments", price: 1.0, extra: true }
+];
+
+export function packingLine(itemCount: number) {
+  const qty = Math.max(0, itemCount);
+  return { name: PACKING_NAME, qty, unit_price: PACKING };
+}
+
+export function packingCount(lines: { qty: number; pack?: boolean }[]) {
+  return lines.reduce((s, i) => s + (i.pack === false ? 0 : i.qty), 0);
+}
+
+export function packingFee(orderType: string, itemCount: number) {
+  return orderType === "bungkus" ? PACKING * Math.max(0, itemCount) : 0;
+}
+
+export function campurLine(item: CampurItem, extraCount = 0) {
+  const n = item.extra ? Math.max(0, extraCount || 0) : 0;
+  return {
+    name: n ? item.name + " + extra ×" + n : item.name,
+    qty: 1,
+    unit_price: item.price + n * EXTRA
+  };
+}
 
 export const TABLES = Array.from({ length: 20 }, (_, i) => String(i + 1).padStart(2, "0"));
 export const CATS = ["All", ...MENU.map((m) => m.cat)];

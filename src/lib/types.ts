@@ -11,11 +11,12 @@ export type MenuItem = {
   options?: string[];
   hot?: number;
   cold?: number;
+  canned?: boolean;
 };
 
 export type MenuCategory = { cat: string; items: MenuItem[] };
 
-export type TrayLine = { name: string; price: number; qty: number };
+export type TrayLine = { name: string; price: number; qty: number; pack?: boolean };
 
 export type OrderItem = {
   id: string;

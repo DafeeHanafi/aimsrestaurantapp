@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { CATS, MENU, PROTEINS, TABLES, VEGGIES } from "./lib/menu";
+import { CATS, EXTRA, MENU, PACKING, PACKING_NAME, PROTEINS, TABLES, VEGGIES, campurLine, packingCount, packingFee, packingLine } from "./lib/menu";
 import { businessDate, downloadSalesCsv, money, ticketCall, typeLabel } from "./lib/format";
 import {
   closeTableBill,
@@ -57,6 +57,7 @@ export default function App() {
   const [posType, setPosType] = useState<OrderType>("dine_in");
   const [posProtein, setPosProtein] = useState<string[]>([]);
   const [posVeg, setPosVeg] = useState<string[]>([]);
+  const [posExtra, setPosExtra] = useState<Record<string, number>>({});
   const [tickets, setTickets] = useState<Order[]>([]);
   const [kdsFilter, setKdsFilter] = useState("preparing");
   const [kdsLoading, setKdsLoading] = useState(false);
@@ -187,17 +188,55 @@ export default function App() {
 
   const trayCount = tray.reduce((s, i) => s + i.qty, 0);
   const trayTotal = tray.reduce((s, i) => s + i.qty * i.price, 0);
-  const posTotal = posProtein.reduce((s, id) => s + (PROTEINS.find((x) => x.id === id)?.price || 0), 0) + posVeg.length;
+  const posTotal =
+    posProtein.reduce((s, id) => {
+      const p = PROTEINS.find((x) => x.id === id);
+      return s + (p ? campurLine(p, posExtra[id] || 0).unit_price : 0);
+    }, 0) +
+    posVeg.reduce((s, id) => {
+      const v = VEGGIES.find((x) => x.id === id);
+      return s + (v ? campurLine(v, posExtra[id] || 0).unit_price : 0);
+    }, 0);
+  const posItemCount = posProtein.length + posVeg.length;
+  const guestPackCount = packingCount(tray);
+  const guestPacking = packingFee(orderType, guestPackCount);
+  const posPacking = packingFee(posType, posItemCount);
+  const guestTotal = trayTotal + guestPacking;
+  const posGrand = posTotal + posPacking;
+
+  function pickOrderType(next: OrderType, staff = false) {
+    if (staff) setPosType(next);
+    else setOrderType(next);
+    if (next === "bungkus") {
+      ping("Bungkus adds 30¢ packing per item. Canned drinks have no packing fee.");
+      if (!staff) {
+        window.alert("Bungkus includes $0.30 packing per item for plastic / container. Canned drinks are not charged packing.");
+      }
+    }
+  }
+
+  function toggleCampur(kind: "protein" | "veg", id: string) {
+    const selected = kind === "protein" ? posProtein : posVeg;
+    const setSelected = kind === "protein" ? setPosProtein : setPosVeg;
+    const on = selected.includes(id);
+    setSelected(on ? selected.filter((x) => x !== id) : [...selected, id]);
+    if (on) setPosExtra((prev) => ({ ...prev, [id]: 0 }));
+  }
+
+  function bumpExtra(id: string, delta: number) {
+    setPosExtra((prev) => ({ ...prev, [id]: Math.max(0, (prev[id] || 0) + delta) }));
+  }
 
   function addItem(item: MenuItem) {
     const option = item.options ? choice[item.id] || item.options[0] : undefined;
     const temp = item.hot != null ? choice[item.id + "-t"] || "Hot" : undefined;
     const name = [item.name, option, temp].filter(Boolean).join(" · ");
     const price = item.hot != null ? (temp === "Cold" ? item.cold! : item.hot) : item.price!;
+    const pack = !item.canned;
     setTray((prev) => {
-      const found = prev.find((t) => t.name === name && t.price === price);
+      const found = prev.find((t) => t.name === name && t.price === price && t.pack !== false === pack);
       if (found) return prev.map((t) => (t === found ? { ...t, qty: t.qty + 1 } : t));
-      return [...prev, { name, price, qty: 1 }];
+      return [...prev, { name, price, qty: 1, pack }];
     });
   }
 
@@ -216,8 +255,8 @@ export default function App() {
         order_type: orderType,
         source: "guest",
         kitchen_notes: notes,
-        total: trayTotal,
-        items: trayAsItems(tray)
+        total: guestTotal,
+        items: orderType === "bungkus" && guestPackCount ? [...trayAsItems(tray), packingLine(guestPackCount)] : trayAsItems(tray)
       });
       setTray([]);
       setNotes("");
@@ -237,26 +276,22 @@ export default function App() {
     if (!posProtein.length) return ping("Pick a protein");
     setSending(true);
     const items = [
-      ...posProtein.map((id) => {
-        const p = PROTEINS.find((x) => x.id === id)!;
-        return { name: p.name, qty: 1, unit_price: p.price };
-      }),
-      ...posVeg.map((id) => {
-        const v = VEGGIES.find((x) => x.id === id)!;
-        return { name: v.name, qty: 1, unit_price: v.price };
-      })
+      ...posProtein.map((id) => campurLine(PROTEINS.find((x) => x.id === id)!, posExtra[id] || 0)),
+      ...posVeg.map((id) => campurLine(VEGGIES.find((x) => x.id === id)!, posExtra[id] || 0))
     ];
+    if (posType === "bungkus") items.push(packingLine(items.length));
     try {
       const data = await insertOrder(sb, {
         table_number: posTable,
         order_type: posType,
         source: "pos",
         kitchen_notes: "Nasi Campur plate",
-        total: posTotal,
+        total: posGrand,
         items
       });
       setPosProtein([]);
       setPosVeg([]);
+      setPosExtra({});
       const call = ticketCall(data);
       setLastCall(call);
       ping("Plate " + call + " on table " + posTable);
@@ -346,7 +381,7 @@ export default function App() {
       <main className="max-w-5xl mx-auto px-4 py-6">
         <p className="uppercase tracking-[0.2em] text-teak text-xs">Nasi Campur counter</p>
         <h2 className="font-display text-4xl mb-4">3-second plate</h2>
-        <p className="mb-4 text-sm">Tap protein and $1.00 sides, then send to the table bill. No rice charge.</p>
+        <p className="mb-4 text-sm">Tap protein and $1.00 sides, then send to the table bill. No rice charge. Tap +50¢ as many times as needed for extra portion or bigger meat.</p>
         <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 mb-4">
           {TABLES.map((t) => (
             <button key={t} onClick={() => setPosTable(t)} className={`py-2 rounded-lg ${posTable === t ? "bg-ink text-kraft" : "bg-white"}`}>
@@ -354,41 +389,76 @@ export default function App() {
             </button>
           ))}
         </div>
-        <div className="flex gap-2 mb-5">
-          <button onClick={() => setPosType("dine_in")} className={`px-4 py-2 rounded-xl ${posType === "dine_in" ? "bg-pandan text-white" : "bg-white"}`}>
+        <div className="flex gap-2 mb-3">
+          <button onClick={() => pickOrderType("dine_in", true)} className={`px-4 py-2 rounded-xl ${posType === "dine_in" ? "bg-pandan text-white" : "bg-white"}`}>
             Dine-In
           </button>
-          <button onClick={() => setPosType("bungkus")} className={`px-4 py-2 rounded-xl ${posType === "bungkus" ? "bg-chili text-white" : "bg-white"}`}>
+          <button onClick={() => pickOrderType("bungkus", true)} className={`px-4 py-2 rounded-xl ${posType === "bungkus" ? "bg-chili text-white" : "bg-white"}`}>
             Bungkus
           </button>
         </div>
+        {posType === "bungkus" ? (
+          <p className="mb-5 text-sm font-bold bg-chili/15 border border-chili text-chili rounded-xl px-3 py-2">
+            Bungkus adds {money(PACKING)} packing per item ({posItemCount} × {money(PACKING)} = {money(posPacking)}).
+          </p>
+        ) : (
+          <div className="mb-5" />
+        )}
         <h3 className="font-bold mb-2">Protein</h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-5">
-          {PROTEINS.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => setPosProtein((arr) => (arr.includes(p.id) ? arr.filter((x) => x !== p.id) : [...arr, p.id]))}
-              className={`p-4 rounded-2xl text-left ${posProtein.includes(p.id) ? "bg-chili text-white" : "bg-white"}`}
-            >
-              <span className="block font-bold">{p.name}</span>
-              {money(p.price)}
-            </button>
-          ))}
+          {PROTEINS.map((p) => {
+            const on = posProtein.includes(p.id);
+            const extras = on && p.extra ? posExtra[p.id] || 0 : 0;
+            return (
+              <div key={p.id} className={`p-4 rounded-2xl text-left ${on ? "bg-chili text-white" : "bg-white"}`}>
+                <button type="button" onClick={() => toggleCampur("protein", p.id)} className="w-full text-left">
+                  <span className="block font-bold">{p.name}</span>
+                  {money(p.price + extras * EXTRA)}
+                  {p.extra ? <span className="block text-xs opacity-80 mt-1">+{money(EXTRA)} each extra / bigger tap</span> : null}
+                </button>
+                {p.extra ? (
+                  <div className="mt-2 flex items-center gap-1">
+                    <button type="button" disabled={!on || extras < 1} onClick={() => bumpExtra(p.id, -1)} className={`w-8 h-8 rounded-full font-bold ${on ? "bg-white/20" : "bg-ink/10 text-ink/40"}`}>
+                      −
+                    </button>
+                    <button type="button" disabled={!on} onClick={() => bumpExtra(p.id, 1)} className={`flex-1 text-xs font-bold px-2 py-2 rounded-full ${extras ? "bg-kraft text-ink" : on ? "bg-white/20" : "bg-ink/10 text-ink/40"}`}>
+                      +50¢ ×{extras}
+                    </button>
+                    <button type="button" disabled={!on} onClick={() => bumpExtra(p.id, 1)} className={`w-8 h-8 rounded-full font-bold ${on ? "bg-kraft text-ink" : "bg-ink/10 text-ink/40"}`}>
+                      +
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
-        <h3 className="font-bold mb-2">Veggie / add-on · $1.00</h3>
+        <h3 className="font-bold mb-2">Add-on · Veggie and condiments · $1.00 · tap +50¢ per extra</h3>
         <div className="flex flex-wrap gap-2 mb-8">
-          {VEGGIES.map((v) => (
-            <button
-              key={v.id}
-              onClick={() => setPosVeg((arr) => (arr.includes(v.id) ? arr.filter((x) => x !== v.id) : [...arr, v.id]))}
-              className={`px-4 py-2 rounded-full ${posVeg.includes(v.id) ? "chip-on" : "bg-white"}`}
-            >
-              {v.name}
-            </button>
-          ))}
+          {VEGGIES.map((v) => {
+            const on = posVeg.includes(v.id);
+            const extras = on ? posExtra[v.id] || 0 : 0;
+            return (
+              <div key={v.id} className={`rounded-full px-3 py-2 flex items-center gap-1 ${on ? "chip-on" : "bg-white"}`}>
+                <button type="button" onClick={() => toggleCampur("veg", v.id)} className="font-bold px-1">
+                  {v.name}
+                </button>
+                <button type="button" disabled={!on || extras < 1} onClick={() => bumpExtra(v.id, -1)} className="w-7 h-7 rounded-full font-bold bg-white/70">
+                  −
+                </button>
+                <button type="button" disabled={!on} onClick={() => bumpExtra(v.id, 1)} className={`text-[11px] font-bold px-2 py-1 rounded-full ${extras ? "bg-chili text-white" : "bg-white/70 text-ink"}`}>
+                  +50¢ ×{extras}
+                </button>
+                <button type="button" disabled={!on} onClick={() => bumpExtra(v.id, 1)} className="w-7 h-7 rounded-full font-bold bg-white/70">
+                  +
+                </button>
+              </div>
+            );
+          })}
         </div>
         <button onClick={sendPlate} disabled={sending} className="w-full bg-ink text-kraft rounded-2xl py-4 text-xl font-display ticket">
-          Send plate · Table {posTable} · {money(posTotal)}
+          Send plate · Table {posTable} · {money(posGrand)}
+          {posType === "bungkus" ? " incl. packing" : ""}
         </button>
         <button onClick={() => go("bill", posTable)} className="mt-3 w-full bg-white rounded-2xl py-3 font-bold">
           Open Table {posTable} bill
@@ -816,6 +886,7 @@ export default function App() {
                         <div className="flex justify-between gap-3">
                           <div>
                             <h3 className="font-bold text-lg">{item.name}</h3>
+                            {item.canned ? <p className="text-xs text-ink/60">Can · no bungkus packing</p> : null}
                             {item.desc ? <p className="text-sm text-ink/70">{item.desc}</p> : null}
                           </div>
                           <p className="font-display text-xl">{item.hot != null ? money(item.hot) + " / " + money(item.cold!) : money(item.price!)}</p>
@@ -852,16 +923,21 @@ export default function App() {
         <div className="fixed bottom-0 inset-x-0 z-40 border-t-4 border-chili bg-kraft/95 px-4 py-3">
           <p className="text-center font-bold text-sm mb-2">How do you want this order?</p>
           <div className="max-w-md mx-auto grid grid-cols-2 gap-2 mb-2">
-            <button onClick={() => setOrderType("dine_in")} className={`py-3 rounded-2xl font-bold text-lg ${orderType === "dine_in" ? "bg-pandan text-white" : "bg-white border-2 border-ink/20"}`}>
+            <button onClick={() => pickOrderType("dine_in")} className={`py-3 rounded-2xl font-bold text-lg ${orderType === "dine_in" ? "bg-pandan text-white" : "bg-white border-2 border-ink/20"}`}>
               Dine-In
             </button>
-            <button onClick={() => setOrderType("bungkus")} className={`py-3 rounded-2xl font-bold text-lg ${orderType === "bungkus" ? "bg-chili text-white" : "bg-white border-2 border-ink/20"}`}>
+            <button onClick={() => pickOrderType("bungkus")} className={`py-3 rounded-2xl font-bold text-lg ${orderType === "bungkus" ? "bg-chili text-white" : "bg-white border-2 border-ink/20"}`}>
               Bungkus
             </button>
           </div>
+          {orderType === "bungkus" ? (
+            <p className="max-w-md mx-auto text-center text-sm font-bold text-chili mb-2">
+              Bungkus adds {money(PACKING)} packing per item, not canned drinks ({guestPackCount} × {money(PACKING)} = {money(guestPacking)}).
+            </p>
+          ) : null}
           <button onClick={() => setModal(true)} className="max-w-md mx-auto block w-full bg-ink text-kraft rounded-2xl px-4 py-3 font-bold">
             <i className="fa-solid fa-bowl-food mr-2" />
-            Checkout tray {trayCount} · {money(trayTotal)}
+            Checkout tray {trayCount} · {money(guestTotal)}
             {orderType ? " · " + (orderType === "bungkus" ? "Bungkus" : "Dine-In") : ""}
           </button>
         </div>
@@ -879,7 +955,7 @@ export default function App() {
                   <div key={t.name} className="flex items-center justify-between py-2 border-b border-ink/10">
                     <div>
                       <p className="font-bold">{t.name}</p>
-                      <p className="text-sm">{money(t.price)}</p>
+                      <p className="text-sm">{money(t.price)}{t.pack === false ? " · can, no packing" : ""}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <button className="w-8 h-8 rounded-full bg-white" onClick={() => setTray((prev) => prev.map((x) => (x.name === t.name ? { ...x, qty: x.qty - 1 } : x)).filter((x) => x.qty > 0))}>
@@ -895,24 +971,33 @@ export default function App() {
               ) : (
                 <p className="text-ink/70">Nothing in the tray yet.</p>
               )}
+              {orderType === "bungkus" && guestPackCount ? (
+                <div className="flex items-center justify-between py-2 border-b border-ink/10 text-chili">
+                  <p className="font-bold">{PACKING_NAME} · {guestPackCount} × {money(PACKING)}</p>
+                  <p className="font-bold">{money(guestPacking)}</p>
+                </div>
+              ) : null}
               <p className="mt-4 font-bold">
                 Dine-In or Bungkus <span className="text-chili">*</span>
               </p>
               <div className="grid grid-cols-2 gap-2 mt-2">
-                <button onClick={() => setOrderType("dine_in")} className={`py-4 rounded-2xl font-bold text-lg ${orderType === "dine_in" ? "bg-pandan text-white" : "bg-white border-2 border-ink/20"}`}>
+                <button onClick={() => pickOrderType("dine_in")} className={`py-4 rounded-2xl font-bold text-lg ${orderType === "dine_in" ? "bg-pandan text-white" : "bg-white border-2 border-ink/20"}`}>
                   Dine-In
                 </button>
-                <button onClick={() => setOrderType("bungkus")} className={`py-4 rounded-2xl font-bold text-lg ${orderType === "bungkus" ? "bg-chili text-white" : "bg-white border-2 border-ink/20"}`}>
+                <button onClick={() => pickOrderType("bungkus")} className={`py-4 rounded-2xl font-bold text-lg ${orderType === "bungkus" ? "bg-chili text-white" : "bg-white border-2 border-ink/20"}`}>
                   Bungkus
                 </button>
               </div>
+              {orderType === "bungkus" ? (
+                <p className="mt-2 text-sm font-bold text-chili">Alert: bungkus includes {money(PACKING)} packing per item. Canned drinks have no packing fee.</p>
+              ) : null}
               <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full mt-3 rounded-xl p-3 text-sm" placeholder="Kitchen notes" />
               <button
                 onClick={submitGuest}
                 disabled={sending || !orderType}
                 className={`mt-3 w-full rounded-xl py-3 font-bold ${orderType ? "bg-chili text-white" : "bg-ink/20 text-ink/50"}`}
               >
-                {orderType ? "Send " + (orderType === "bungkus" ? "Bungkus" : "Dine-In") + " · " + money(trayTotal) : "Pick Dine-In or Bungkus first"}
+                {orderType ? "Send " + (orderType === "bungkus" ? "Bungkus" : "Dine-In") + " · " + money(guestTotal) : "Pick Dine-In or Bungkus first"}
               </button>
             </div>
           </div>
