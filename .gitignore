@@ -1,0 +1,10 @@
+.env
+.env.local
+.env.*.local
+.supabase
+supabase/.temp
+.netlify
+node_modules
+dist
+.next
+.DS_Store
