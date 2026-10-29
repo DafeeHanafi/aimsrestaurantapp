@@ -14,9 +14,14 @@ import {
 import { connectBackend } from "./lib/supabase";
 import type { DayClose, MenuItem, Order, OrderType, SalesRow, TrayLine, View } from "./lib/types";
 
+function isStaffView(v: View) {
+  return v === "pos" || v === "kds" || v === "bill" || v === "z" || v === "accounts";
+}
+
 function parseView(): View {
   const v = new URLSearchParams(location.search).get("view");
-  if (v === "pos" || v === "kds" || v === "bill" || v === "z" || v === "accounts") return v;
+  if (v === "staff" || v === "pos") return "pos";
+  if (v === "kds" || v === "bill" || v === "z" || v === "accounts") return v;
   return "menu";
 }
 
@@ -26,9 +31,12 @@ function parseTable() {
 
 function setQuery(view: View, table?: string) {
   const p = new URLSearchParams(location.search);
-  p.set("view", view);
+  if (isStaffView(view)) p.set("view", view);
+  else p.delete("view");
   if (table) p.set("table", table);
-  history.replaceState({}, "", "?" + p.toString());
+  else p.delete("table");
+  const q = p.toString();
+  history.replaceState({}, "", q ? "?" + q : location.pathname);
 }
 
 export default function App() {
@@ -271,6 +279,19 @@ export default function App() {
   const today = businessDate();
   const todayRows = salesRows.filter((r) => (r.business_date || businessDate(r.datetime)) === today);
 
+  const guestHeader = (
+    <header className="sticky top-0 z-30 backdrop-blur bg-kraft/80 border-b border-ink/10">
+      <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] tracking-[0.25em] uppercase text-teak">Aims Solution</p>
+          <h1 className="font-display text-2xl leading-none">IFM Kopitiam</h1>
+          <p className="text-[10px] text-ink/50">{backendLabel}</p>
+        </div>
+        {table ? <p className="text-sm font-bold">Table {table}</p> : null}
+      </div>
+    </header>
+  );
+
   const nav = (
     <header className="sticky top-0 z-30 backdrop-blur bg-kraft/80 border-b border-ink/10">
       <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
@@ -282,7 +303,6 @@ export default function App() {
         <nav className="flex flex-wrap gap-1 justify-end">
           {(
             [
-              ["menu", "Menu", "fa-utensils"],
               ["pos", "POS", "fa-cash-register"],
               ["kds", "KDS", "fa-fire-burner"],
               ["bill", "Bills", "fa-receipt"],
@@ -749,25 +769,29 @@ export default function App() {
       <>
         <main className="max-w-5xl mx-auto px-4 pb-52 pt-6">
           <div className="flex flex-wrap items-center gap-3 mb-5">
-            <label className="text-sm">
-              Table
-              <select
-                value={table}
-                onChange={(e) => {
-                  const t = e.target.value;
-                  setTable(t);
-                  setQuery("menu", t || undefined);
-                }}
-                className="ml-2 bg-white rounded-lg px-2 py-1 border border-ink/20"
-              >
-                <option value="">Select</option>
-                {TABLES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {table ? (
+              <p className="text-sm font-bold">Table {table}</p>
+            ) : (
+              <label className="text-sm">
+                Table
+                <select
+                  value={table}
+                  onChange={(e) => {
+                    const t = e.target.value;
+                    setTable(t);
+                    setQuery("menu", t || undefined);
+                  }}
+                  className="ml-2 bg-white rounded-lg px-2 py-1 border border-ink/20"
+                >
+                  <option value="">Select</option>
+                  {TABLES.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search menu" className="flex-1 min-w-[160px] bg-white rounded-lg px-3 py-2 border border-ink/20" />
           </div>
           <div className="flex gap-2 overflow-x-auto pb-3 mb-4">
@@ -899,7 +923,7 @@ export default function App() {
 
   return (
     <div>
-      {nav}
+      {isStaffView(view) ? nav : guestHeader}
       {view === "menu" || view === "pos" ? lastCallBanner : null}
       {page}
       {toastEl}
