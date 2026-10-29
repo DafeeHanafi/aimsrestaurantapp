@@ -1,3 +1,5 @@
-# AIMS Restaurant App
+# aimsrestaurantapp
 
-Standalone restaurant app. This repository is separate from `theoccasions-booth-booking` and `toc-finance`.
+Digital QR Menu & Nasi Campur POS System for Aims Solutions Sdn. Bhd.
+
+Standalone project. Not connected to `theoccasions-booth-booking` or `toc-finance`.
