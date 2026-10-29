@@ -118,13 +118,17 @@ export function packingFee(orderType: string, itemCount: number) {
   return orderType === "bungkus" ? PACKING * Math.max(0, itemCount) : 0;
 }
 
-export function campurLine(item: CampurItem, extraCount = 0) {
-  const n = item.extra ? Math.max(0, extraCount || 0) : 0;
-  return {
-    name: n ? item.name + " + extra ×" + n : item.name,
-    qty: 1,
-    unit_price: item.price + n * EXTRA
-  };
+export function campurItems(item: CampurItem, extraCount = 0, portions = 1) {
+  const qty = Math.max(0, portions);
+  const extra = item.extra ? Math.max(0, extraCount || 0) : 0;
+  const lines: { name: string; qty: number; unit_price: number }[] = [];
+  if (qty) lines.push({ name: item.name, qty, unit_price: item.price });
+  if (extra) lines.push({ name: item.name + " extra / bigger", qty: extra, unit_price: EXTRA });
+  return lines;
+}
+
+export function campurTotal(item: CampurItem, extraCount = 0, portions = 0) {
+  return campurItems(item, extraCount, portions).reduce((s, l) => s + l.qty * l.unit_price, 0);
 }
 
 export const TABLES = Array.from({ length: 20 }, (_, i) => String(i + 1).padStart(2, "0"));

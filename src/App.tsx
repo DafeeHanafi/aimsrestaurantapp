@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { CATS, EXTRA, MENU, PACKING, PACKING_NAME, PROTEINS, TABLES, VEGGIES, campurLine, packingCount, packingFee, packingLine } from "./lib/menu";
+import { CATS, EXTRA, MENU, PACKING, PACKING_NAME, PROTEINS, TABLES, VEGGIES, campurItems, campurTotal, packingCount, packingFee, packingLine } from "./lib/menu";
 import { businessDate, downloadSalesCsv, money, ticketCall, typeLabel } from "./lib/format";
 import {
   closeTableBill,
@@ -55,8 +55,7 @@ export default function App() {
   const [choice, setChoice] = useState<Record<string, string>>({});
   const [posTable, setPosTable] = useState(parseTable() || "01");
   const [posType, setPosType] = useState<OrderType>("dine_in");
-  const [posProtein, setPosProtein] = useState<string[]>([]);
-  const [posVeg, setPosVeg] = useState<string[]>([]);
+  const [posQty, setPosQty] = useState<Record<string, number>>({});
   const [posExtra, setPosExtra] = useState<Record<string, number>>({});
   const [tickets, setTickets] = useState<Order[]>([]);
   const [kdsFilter, setKdsFilter] = useState("preparing");
@@ -189,15 +188,9 @@ export default function App() {
   const trayCount = tray.reduce((s, i) => s + i.qty, 0);
   const trayTotal = tray.reduce((s, i) => s + i.qty * i.price, 0);
   const posTotal =
-    posProtein.reduce((s, id) => {
-      const p = PROTEINS.find((x) => x.id === id);
-      return s + (p ? campurLine(p, posExtra[id] || 0).unit_price : 0);
-    }, 0) +
-    posVeg.reduce((s, id) => {
-      const v = VEGGIES.find((x) => x.id === id);
-      return s + (v ? campurLine(v, posExtra[id] || 0).unit_price : 0);
-    }, 0);
-  const posItemCount = posProtein.length + posVeg.length;
+    PROTEINS.reduce((s, p) => s + campurTotal(p, posExtra[p.id] || 0, posQty[p.id] || 0), 0) +
+    VEGGIES.reduce((s, v) => s + campurTotal(v, posExtra[v.id] || 0, posQty[v.id] || 0), 0);
+  const posItemCount = PROTEINS.concat(VEGGIES).reduce((s, i) => s + (posQty[i.id] || 0), 0);
   const guestPackCount = packingCount(tray);
   const guestPacking = packingFee(orderType, guestPackCount);
   const posPacking = packingFee(posType, posItemCount);
@@ -215,28 +208,45 @@ export default function App() {
     }
   }
 
-  function toggleCampur(kind: "protein" | "veg", id: string) {
-    const selected = kind === "protein" ? posProtein : posVeg;
-    const setSelected = kind === "protein" ? setPosProtein : setPosVeg;
-    const on = selected.includes(id);
-    setSelected(on ? selected.filter((x) => x !== id) : [...selected, id]);
-    if (on) setPosExtra((prev) => ({ ...prev, [id]: 0 }));
+  function bumpPosQty(id: string, delta: number) {
+    setPosQty((prev) => {
+      const next = Math.max(0, (prev[id] || 0) + delta);
+      return { ...prev, [id]: next };
+    });
+    if (delta < 0) {
+      setPosExtra((prev) => {
+        const qty = Math.max(0, (posQty[id] || 0) + delta);
+        return qty ? prev : { ...prev, [id]: 0 };
+      });
+    }
   }
 
   function bumpExtra(id: string, delta: number) {
     setPosExtra((prev) => ({ ...prev, [id]: Math.max(0, (prev[id] || 0) + delta) }));
   }
 
-  function addItem(item: MenuItem) {
+  function itemSpec(item: MenuItem) {
     const option = item.options ? choice[item.id] || item.options[0] : undefined;
     const temp = item.hot != null ? choice[item.id + "-t"] || "Hot" : undefined;
     const name = [item.name, option, temp].filter(Boolean).join(" · ");
     const price = item.hot != null ? (temp === "Cold" ? item.cold! : item.hot) : item.price!;
     const pack = !item.canned;
+    return { name, price, pack };
+  }
+
+  function trayQtyFor(item: MenuItem) {
+    const { name, price, pack } = itemSpec(item);
+    return tray.find((t) => t.name === name && t.price === price && (t.pack !== false) === pack)?.qty || 0;
+  }
+
+  function bumpItem(item: MenuItem, delta: number) {
+    const { name, price, pack } = itemSpec(item);
     setTray((prev) => {
-      const found = prev.find((t) => t.name === name && t.price === price && t.pack !== false === pack);
-      if (found) return prev.map((t) => (t === found ? { ...t, qty: t.qty + 1 } : t));
-      return [...prev, { name, price, qty: 1, pack }];
+      const found = prev.find((t) => t.name === name && t.price === price && (t.pack !== false) === pack);
+      if (!found) return delta > 0 ? [...prev, { name, price, qty: delta, pack }] : prev;
+      return prev
+        .map((t) => (t === found ? { ...t, qty: t.qty + delta } : t))
+        .filter((t) => t.qty > 0);
     });
   }
 
@@ -273,13 +283,14 @@ export default function App() {
 
   async function sendPlate() {
     if (!sb) return;
-    if (!posProtein.length) return ping("Pick a protein");
+    const proteinQty = PROTEINS.reduce((s, p) => s + (posQty[p.id] || 0), 0);
+    if (!proteinQty) return ping("Pick a protein");
     setSending(true);
     const items = [
-      ...posProtein.map((id) => campurLine(PROTEINS.find((x) => x.id === id)!, posExtra[id] || 0)),
-      ...posVeg.map((id) => campurLine(VEGGIES.find((x) => x.id === id)!, posExtra[id] || 0))
+      ...PROTEINS.flatMap((p) => campurItems(p, posExtra[p.id] || 0, posQty[p.id] || 0)),
+      ...VEGGIES.flatMap((v) => campurItems(v, posExtra[v.id] || 0, posQty[v.id] || 0))
     ];
-    if (posType === "bungkus") items.push(packingLine(items.length));
+    if (posType === "bungkus") items.push(packingLine(posItemCount));
     try {
       const data = await insertOrder(sb, {
         table_number: posTable,
@@ -289,8 +300,7 @@ export default function App() {
         total: posGrand,
         items
       });
-      setPosProtein([]);
-      setPosVeg([]);
+      setPosQty({});
       setPosExtra({});
       const call = ticketCall(data);
       setLastCall(call);
@@ -381,7 +391,7 @@ export default function App() {
       <main className="max-w-5xl mx-auto px-4 py-6">
         <p className="uppercase tracking-[0.2em] text-teak text-xs">Nasi Campur counter</p>
         <h2 className="font-display text-4xl mb-4">3-second plate</h2>
-        <p className="mb-4 text-sm">Tap protein and $1.00 sides, then send to the table bill. No rice charge. Tap +50¢ as many times as needed for extra portion or bigger meat.</p>
+        <p className="mb-4 text-sm">Set portion qty, then send to the table bill. No rice charge. Tap +50¢ as many times as needed for extra / bigger meat.</p>
         <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 mb-4">
           {TABLES.map((t) => (
             <button key={t} onClick={() => setPosTable(t)} className={`py-2 rounded-lg ${posTable === t ? "bg-ink text-kraft" : "bg-white"}`}>
@@ -407,24 +417,31 @@ export default function App() {
         <h3 className="font-bold mb-2">Protein</h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-5">
           {PROTEINS.map((p) => {
-            const on = posProtein.includes(p.id);
-            const extras = on && p.extra ? posExtra[p.id] || 0 : 0;
+            const qty = posQty[p.id] || 0;
+            const extras = qty && p.extra ? posExtra[p.id] || 0 : 0;
             return (
-              <div key={p.id} className={`p-4 rounded-2xl text-left ${on ? "bg-chili text-white" : "bg-white"}`}>
-                <button type="button" onClick={() => toggleCampur("protein", p.id)} className="w-full text-left">
-                  <span className="block font-bold">{p.name}</span>
-                  {money(p.price + extras * EXTRA)}
-                  {p.extra ? <span className="block text-xs opacity-80 mt-1">+{money(EXTRA)} each extra / bigger tap</span> : null}
-                </button>
+              <div key={p.id} className={`p-4 rounded-2xl text-left ${qty ? "bg-chili text-white" : "bg-white"}`}>
+                <p className="font-bold">{p.name}</p>
+                <p>{money(p.price)} · {qty} portion{qty === 1 ? "" : "s"}</p>
+                {p.extra ? <p className="text-xs opacity-80 mt-1">+{money(EXTRA)} extra / bigger</p> : null}
+                <div className="mt-2 flex items-center gap-1">
+                  <button type="button" onClick={() => bumpPosQty(p.id, -1)} disabled={qty < 1} className={`w-8 h-8 rounded-full font-bold ${qty ? "bg-white/20" : "bg-ink/10"}`}>
+                    −
+                  </button>
+                  <span className="flex-1 text-center font-bold">{qty}</span>
+                  <button type="button" onClick={() => bumpPosQty(p.id, 1)} className={`w-8 h-8 rounded-full font-bold ${qty ? "bg-kraft text-ink" : "bg-ink/10"}`}>
+                    +
+                  </button>
+                </div>
                 {p.extra ? (
                   <div className="mt-2 flex items-center gap-1">
-                    <button type="button" disabled={!on || extras < 1} onClick={() => bumpExtra(p.id, -1)} className={`w-8 h-8 rounded-full font-bold ${on ? "bg-white/20" : "bg-ink/10 text-ink/40"}`}>
+                    <button type="button" disabled={!qty || extras < 1} onClick={() => bumpExtra(p.id, -1)} className={`w-8 h-8 rounded-full font-bold ${qty ? "bg-white/20" : "bg-ink/10 text-ink/40"}`}>
                       −
                     </button>
-                    <button type="button" disabled={!on} onClick={() => bumpExtra(p.id, 1)} className={`flex-1 text-xs font-bold px-2 py-2 rounded-full ${extras ? "bg-kraft text-ink" : on ? "bg-white/20" : "bg-ink/10 text-ink/40"}`}>
+                    <span className={`flex-1 text-xs font-bold text-center px-2 py-2 rounded-full ${extras ? "bg-kraft text-ink" : qty ? "bg-white/20" : "bg-ink/10 text-ink/40"}`}>
                       +50¢ ×{extras}
-                    </button>
-                    <button type="button" disabled={!on} onClick={() => bumpExtra(p.id, 1)} className={`w-8 h-8 rounded-full font-bold ${on ? "bg-kraft text-ink" : "bg-ink/10 text-ink/40"}`}>
+                    </span>
+                    <button type="button" disabled={!qty} onClick={() => bumpExtra(p.id, 1)} className={`w-8 h-8 rounded-full font-bold ${qty ? "bg-kraft text-ink" : "bg-ink/10 text-ink/40"}`}>
                       +
                     </button>
                   </div>
@@ -433,25 +450,30 @@ export default function App() {
             );
           })}
         </div>
-        <h3 className="font-bold mb-2">Add-on · Veggie and condiments · $1.00 · tap +50¢ per extra</h3>
+        <h3 className="font-bold mb-2">Add-on · Veggie and condiments · $1.00 each</h3>
         <div className="flex flex-wrap gap-2 mb-8">
           {VEGGIES.map((v) => {
-            const on = posVeg.includes(v.id);
-            const extras = on ? posExtra[v.id] || 0 : 0;
+            const qty = posQty[v.id] || 0;
+            const extras = qty ? posExtra[v.id] || 0 : 0;
             return (
-              <div key={v.id} className={`rounded-full px-3 py-2 flex items-center gap-1 ${on ? "chip-on" : "bg-white"}`}>
-                <button type="button" onClick={() => toggleCampur("veg", v.id)} className="font-bold px-1">
-                  {v.name}
-                </button>
-                <button type="button" disabled={!on || extras < 1} onClick={() => bumpExtra(v.id, -1)} className="w-7 h-7 rounded-full font-bold bg-white/70">
-                  −
-                </button>
-                <button type="button" disabled={!on} onClick={() => bumpExtra(v.id, 1)} className={`text-[11px] font-bold px-2 py-1 rounded-full ${extras ? "bg-chili text-white" : "bg-white/70 text-ink"}`}>
-                  +50¢ ×{extras}
-                </button>
-                <button type="button" disabled={!on} onClick={() => bumpExtra(v.id, 1)} className="w-7 h-7 rounded-full font-bold bg-white/70">
-                  +
-                </button>
+              <div key={v.id} className={`rounded-2xl px-3 py-2 ${qty ? "chip-on" : "bg-white"}`}>
+                <p className="font-bold text-sm">{v.name}</p>
+                <div className="flex items-center gap-1 mt-1">
+                  <button type="button" onClick={() => bumpPosQty(v.id, -1)} disabled={qty < 1} className="w-7 h-7 rounded-full font-bold bg-white/70">
+                    −
+                  </button>
+                  <span className="min-w-[1.5rem] text-center font-bold">{qty}</span>
+                  <button type="button" onClick={() => bumpPosQty(v.id, 1)} className="w-7 h-7 rounded-full font-bold bg-white/70">
+                    +
+                  </button>
+                  <button type="button" disabled={!qty || extras < 1} onClick={() => bumpExtra(v.id, -1)} className="w-7 h-7 rounded-full font-bold bg-white/70">
+                    −
+                  </button>
+                  <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${extras ? "bg-chili text-white" : "bg-white/70 text-ink"}`}>+50¢ ×{extras}</span>
+                  <button type="button" disabled={!qty} onClick={() => bumpExtra(v.id, 1)} className="w-7 h-7 rounded-full font-bold bg-white/70">
+                    +
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -881,6 +903,7 @@ export default function App() {
                   {items.map((item) => {
                     const drink = choice[item.id] || (item.options && item.options[0]) || "";
                     const temp = choice[item.id + "-t"] || "Hot";
+                    const qty = trayQtyFor(item);
                     return (
                       <article key={item.id} className="bg-white/80 border border-ink/10 rounded-2xl p-4">
                         <div className="flex justify-between gap-3">
@@ -909,9 +932,15 @@ export default function App() {
                             ))}
                           </div>
                         ) : null}
-                        <button onClick={() => addItem(item)} className="mt-3 w-full bg-chili text-white rounded-xl py-2 text-sm font-bold">
-                          + Add to Tray
-                        </button>
+                        <div className="mt-3 flex items-center gap-2">
+                          <button type="button" disabled={qty < 1} onClick={() => bumpItem(item, -1)} className="w-10 h-10 rounded-xl bg-white border border-ink/20 font-bold text-xl disabled:opacity-40">
+                            −
+                          </button>
+                          <span className="flex-1 text-center font-bold text-lg">{qty}</span>
+                          <button type="button" onClick={() => bumpItem(item, 1)} className="w-10 h-10 rounded-xl bg-chili text-white font-bold text-xl">
+                            +
+                          </button>
+                        </div>
                       </article>
                     );
                   })}
