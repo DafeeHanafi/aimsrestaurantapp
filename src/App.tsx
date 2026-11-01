@@ -207,7 +207,6 @@ export default function App() {
     saveCampurCatalog(campur);
   }, [campur]);
 
-  const trayCount = tray.reduce((s, i) => s + i.qty, 0);
   const trayTotal = tray.reduce((s, i) => s + i.qty * i.price, 0);
   const campurLines = campur.proteins.concat(campur.addons);
   const posTotal = campurLines.reduce((s, p) => s + campurTotal(p, posExtra[p.id] || 0, posQty[p.id] || 0, campur.extraPrice), 0);
@@ -611,8 +610,8 @@ export default function App() {
           <div className="mb-8" />
         )}
         <button onClick={sendPlate} disabled={sending} className="w-full bg-ink text-kraft rounded-2xl py-4 text-xl font-display ticket">
-          Send plate · Table {posTable} · {money(posGrand)}
-          {posType === "bungkus" ? " incl. packing" : ""}
+          Total Table {posTable} · {money(posGrand)}
+          {posType === "bungkus" ? " · Bungkus" : " · Dine-In"}
         </button>
         <button onClick={() => go("bill", posTable)} className="mt-3 w-full bg-white rounded-2xl py-3 font-bold">
           Open Table {posTable} bill
@@ -1098,7 +1097,7 @@ export default function App() {
           ) : null}
           <button onClick={() => setModal(true)} className="max-w-md mx-auto block w-full guest-chip-on rounded-2xl px-4 py-3 font-bold">
             <i className="fa-solid fa-bowl-food mr-2" />
-            Checkout tray {trayCount} · {money(guestTotal)}
+            Total Table {table || "--"} · {money(guestTotal)}
             {orderType ? " · " + (orderType === "bungkus" ? "Bungkus" : "Dine-In") : ""}
           </button>
         </div>
