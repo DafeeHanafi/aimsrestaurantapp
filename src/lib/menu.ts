@@ -85,6 +85,7 @@ export const MENU: MenuCategory[] = [
 export const EXTRA = 0.5;
 export const PACKING = 0.3;
 export const PACKING_NAME = "Bungkus packing (plastic / container)";
+const CAMPUR_STORE = "aims-campur-menu-v2";
 
 export type CampurItem = {
   id: string;
@@ -93,17 +94,74 @@ export type CampurItem = {
   extra?: boolean;
 };
 
-export const PROTEINS: CampurItem[] = [
-  { id: "ayam", name: "Ayam", price: 2.0, extra: true },
+export type CampurCatalog = {
+  extraPrice: number;
+  proteins: CampurItem[];
+  addons: CampurItem[];
+};
+
+export const DEFAULT_PROTEINS: CampurItem[] = [
   { id: "daging", name: "Daging", price: 3.0, extra: true },
+  { id: "ayam", name: "Ayam", price: 2.0, extra: true },
   { id: "ikan", name: "Ikan", price: 2.0 },
-  { id: "ayam-grill", name: "Ayam grill (whole leg)", price: 3.5, extra: true },
-  { id: "sambal-pusu", name: "Sambal Pusu", price: 3.0, extra: true }
+  { id: "udang", name: "Udang", price: 3.0, extra: true },
+  { id: "pusu-tumis-pedas", name: "Pusu tumis pedas", price: 3.0, extra: true },
+  { id: "belutak", name: "Belutak", price: 3.0, extra: true }
 ];
 
-export const VEGGIES: CampurItem[] = [
-  { id: "veggie-condiments", name: "Veggie and condiments", price: 1.0, extra: true }
+export const DEFAULT_ADDONS: CampurItem[] = [
+  { id: "vegetable", name: "Vegetable", price: 1.0, extra: true },
+  { id: "sambal-belacan", name: "Sambal belacan", price: 1.0 },
+  { id: "sambal-kicap-pedas", name: "Sambal kicap pedas", price: 1.0 }
 ];
+
+export const DEFAULT_CAMPUR: CampurCatalog = {
+  extraPrice: EXTRA,
+  proteins: DEFAULT_PROTEINS,
+  addons: DEFAULT_ADDONS
+};
+
+function cleanCampurItem(row: CampurItem, fallback: string): CampurItem {
+  const price = Number(row.price);
+  return {
+    id: String(row.id || fallback),
+    name: String(row.name || "Untitled").trim() || "Untitled",
+    price: Number.isFinite(price) && price >= 0 ? Math.round(price * 100) / 100 : 0,
+    extra: !!row.extra
+  };
+}
+
+export function defaultCampurCatalog(): CampurCatalog {
+  return {
+    extraPrice: EXTRA,
+    proteins: DEFAULT_PROTEINS.map((p) => ({ ...p })),
+    addons: DEFAULT_ADDONS.map((a) => ({ ...a }))
+  };
+}
+
+export function loadCampurCatalog(): CampurCatalog {
+  try {
+    const raw = localStorage.getItem(CAMPUR_STORE);
+    if (!raw) return defaultCampurCatalog();
+    const parsed = JSON.parse(raw) as Partial<CampurCatalog>;
+    const extraPrice = Number(parsed.extraPrice);
+    return {
+      extraPrice: Number.isFinite(extraPrice) && extraPrice >= 0 ? Math.round(extraPrice * 100) / 100 : EXTRA,
+      proteins: Array.isArray(parsed.proteins) && parsed.proteins.length ? parsed.proteins.map((p, i) => cleanCampurItem(p, "p-" + i)) : defaultCampurCatalog().proteins,
+      addons: Array.isArray(parsed.addons) && parsed.addons.length ? parsed.addons.map((a, i) => cleanCampurItem(a, "a-" + i)) : defaultCampurCatalog().addons
+    };
+  } catch {
+    return defaultCampurCatalog();
+  }
+}
+
+export function saveCampurCatalog(catalog: CampurCatalog) {
+  localStorage.setItem(CAMPUR_STORE, JSON.stringify(catalog));
+}
+
+export function newCampurId(prefix: string) {
+  return prefix + "-" + Date.now().toString(36);
+}
 
 export function packingLine(itemCount: number) {
   const qty = Math.max(0, itemCount);
@@ -118,17 +176,17 @@ export function packingFee(orderType: string, itemCount: number) {
   return orderType === "bungkus" ? PACKING * Math.max(0, itemCount) : 0;
 }
 
-export function campurItems(item: CampurItem, extraCount = 0, portions = 1) {
+export function campurItems(item: CampurItem, extraCount = 0, portions = 1, extraPrice = EXTRA) {
   const qty = Math.max(0, portions);
   const extra = item.extra ? Math.max(0, extraCount || 0) : 0;
   const lines: { name: string; qty: number; unit_price: number }[] = [];
   if (qty) lines.push({ name: item.name, qty, unit_price: item.price });
-  if (extra) lines.push({ name: item.name + " extra / bigger", qty: extra, unit_price: EXTRA });
+  if (extra) lines.push({ name: item.name + " extra / bigger", qty: extra, unit_price: extraPrice });
   return lines;
 }
 
-export function campurTotal(item: CampurItem, extraCount = 0, portions = 0) {
-  return campurItems(item, extraCount, portions).reduce((s, l) => s + l.qty * l.unit_price, 0);
+export function campurTotal(item: CampurItem, extraCount = 0, portions = 0, extraPrice = EXTRA) {
+  return campurItems(item, extraCount, portions, extraPrice).reduce((s, l) => s + l.qty * l.unit_price, 0);
 }
 
 export const TABLES = Array.from({ length: 20 }, (_, i) => String(i + 1).padStart(2, "0"));

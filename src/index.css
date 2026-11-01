@@ -20,6 +20,74 @@ body {
 }
 
 .chip-on {
-  background: #1c1410;
-  color: #f3e6d4;
+  background: var(--color-ink);
+  color: var(--color-kraft);
+}
+
+.guest-shell {
+  --g-bg: #f3e6d4;
+  --g-surface: rgba(255, 255, 255, 0.82);
+  --g-text: #1c1410;
+  --g-accent: #c23c16;
+  --g-ok: #1f6b52;
+  --g-line: rgba(28, 20, 16, 0.12);
+  --g-dock: rgba(243, 230, 212, 0.95);
+  --g-radius: 1rem;
+  min-height: 100vh;
+  background: var(--g-bg);
+  color: var(--g-text);
+  background-image: radial-gradient(1200px 600px at 10% -10%, #ffe7c8 0%, transparent 50%);
+}
+
+.guest-header {
+  background: color-mix(in srgb, var(--g-bg) 82%, transparent);
+  border-bottom: 1px solid var(--g-line);
+  backdrop-filter: blur(10px);
+}
+
+.guest-surface {
+  background: var(--g-surface);
+  color: var(--g-text);
+  border: 1px solid var(--g-line);
+}
+
+.guest-card {
+  background: var(--g-surface);
+  color: var(--g-text);
+  border: 1px solid var(--g-line);
+  border-radius: var(--g-radius);
+  padding: 1rem;
+}
+
+.guest-chip {
+  border: 1px solid var(--g-line);
+  background: var(--g-surface);
+}
+
+.guest-chip-on {
+  background: var(--g-text);
+  color: var(--g-bg);
+  border-color: var(--g-text);
+}
+
+.guest-plus {
+  background: var(--g-accent);
+  color: #fff;
+}
+
+.guest-ok {
+  background: var(--g-ok);
+  color: #fff;
+}
+
+.guest-dock {
+  background: var(--g-dock);
+  border-top: 4px solid var(--g-accent);
+  color: var(--g-text);
+}
+
+.guest-modal {
+  background: var(--g-surface);
+  color: var(--g-text);
+  border-radius: calc(var(--g-radius) + 8px);
 }

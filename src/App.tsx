@@ -1,6 +1,22 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { CATS, EXTRA, MENU, PACKING, PACKING_NAME, PROTEINS, TABLES, VEGGIES, campurItems, campurTotal, packingCount, packingFee, packingLine } from "./lib/menu";
+import {
+  CATS,
+  MENU,
+  PACKING,
+  PACKING_NAME,
+  TABLES,
+  campurItems,
+  campurTotal,
+  defaultCampurCatalog,
+  loadCampurCatalog,
+  newCampurId,
+  packingCount,
+  packingFee,
+  packingLine,
+  saveCampurCatalog,
+  type CampurItem
+} from "./lib/menu";
 import { businessDate, downloadSalesCsv, money, ticketCall, typeLabel } from "./lib/format";
 import {
   closeTableBill,
@@ -57,6 +73,8 @@ export default function App() {
   const [posType, setPosType] = useState<OrderType>("dine_in");
   const [posQty, setPosQty] = useState<Record<string, number>>({});
   const [posExtra, setPosExtra] = useState<Record<string, number>>({});
+  const [campur, setCampur] = useState(loadCampurCatalog);
+  const [editCampur, setEditCampur] = useState(false);
   const [tickets, setTickets] = useState<Order[]>([]);
   const [kdsFilter, setKdsFilter] = useState("preparing");
   const [kdsLoading, setKdsLoading] = useState(false);
@@ -185,12 +203,15 @@ export default function App() {
     if (view === "bill") loadBill(sb, billTable);
   }, [view, billTable, sb, loadBill, loadSales, loadTickets]);
 
+  useEffect(() => {
+    saveCampurCatalog(campur);
+  }, [campur]);
+
   const trayCount = tray.reduce((s, i) => s + i.qty, 0);
   const trayTotal = tray.reduce((s, i) => s + i.qty * i.price, 0);
-  const posTotal =
-    PROTEINS.reduce((s, p) => s + campurTotal(p, posExtra[p.id] || 0, posQty[p.id] || 0), 0) +
-    VEGGIES.reduce((s, v) => s + campurTotal(v, posExtra[v.id] || 0, posQty[v.id] || 0), 0);
-  const posItemCount = PROTEINS.concat(VEGGIES).reduce((s, i) => s + (posQty[i.id] || 0), 0);
+  const campurLines = campur.proteins.concat(campur.addons);
+  const posTotal = campurLines.reduce((s, p) => s + campurTotal(p, posExtra[p.id] || 0, posQty[p.id] || 0, campur.extraPrice), 0);
+  const posItemCount = campurLines.reduce((s, i) => s + (posQty[i.id] || 0), 0);
   const guestPackCount = packingCount(tray);
   const guestPacking = packingFee(orderType, guestPackCount);
   const posPacking = packingFee(posType, posItemCount);
@@ -223,6 +244,38 @@ export default function App() {
 
   function bumpExtra(id: string, delta: number) {
     setPosExtra((prev) => ({ ...prev, [id]: Math.max(0, (prev[id] || 0) + delta) }));
+  }
+
+  function patchCampurItem(kind: "proteins" | "addons", id: string, patch: Partial<CampurItem>) {
+    setCampur((prev) => ({
+      ...prev,
+      [kind]: prev[kind].map((item) => (item.id === id ? { ...item, ...patch } : item))
+    }));
+  }
+
+  function removeCampurItem(kind: "proteins" | "addons", id: string) {
+    setCampur((prev) => ({ ...prev, [kind]: prev[kind].filter((item) => item.id !== id) }));
+    setPosQty((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setPosExtra((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }
+
+  function addCampurItem(kind: "proteins" | "addons") {
+    const item: CampurItem = {
+      id: newCampurId(kind === "proteins" ? "p" : "a"),
+      name: kind === "proteins" ? "New protein" : "New add-on",
+      price: kind === "proteins" ? 2 : 1,
+      extra: kind === "proteins"
+    };
+    setCampur((prev) => ({ ...prev, [kind]: [...prev[kind], item] }));
+    setEditCampur(true);
   }
 
   function itemSpec(item: MenuItem) {
@@ -283,13 +336,10 @@ export default function App() {
 
   async function sendPlate() {
     if (!sb) return;
-    const proteinQty = PROTEINS.reduce((s, p) => s + (posQty[p.id] || 0), 0);
+    const proteinQty = campur.proteins.reduce((s, p) => s + (posQty[p.id] || 0), 0);
     if (!proteinQty) return ping("Pick a protein");
     setSending(true);
-    const items = [
-      ...PROTEINS.flatMap((p) => campurItems(p, posExtra[p.id] || 0, posQty[p.id] || 0)),
-      ...VEGGIES.flatMap((v) => campurItems(v, posExtra[v.id] || 0, posQty[v.id] || 0))
-    ];
+    const items = campurLines.flatMap((p) => campurItems(p, posExtra[p.id] || 0, posQty[p.id] || 0, campur.extraPrice));
     if (posType === "bungkus") items.push(packingLine(posItemCount));
     try {
       const data = await insertOrder(sb, {
@@ -325,12 +375,12 @@ export default function App() {
   const todayRows = salesRows.filter((r) => (r.business_date || businessDate(r.datetime)) === today);
 
   const guestHeader = (
-    <header className="sticky top-0 z-30 backdrop-blur bg-kraft/80 border-b border-ink/10">
+    <header className="guest-header sticky top-0 z-30">
       <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
         <div>
           <p className="text-[11px] tracking-[0.25em] uppercase text-teak">Aims Solution</p>
           <h1 className="font-display text-2xl leading-none">IFM Kopitiam</h1>
-          <p className="text-[10px] text-ink/50">{backendLabel}</p>
+          <p className="text-[10px] opacity-50">{backendLabel}</p>
         </div>
         {table ? <p className="text-sm font-bold">Table {table}</p> : null}
       </div>
@@ -391,7 +441,35 @@ export default function App() {
       <main className="max-w-5xl mx-auto px-4 py-6">
         <p className="uppercase tracking-[0.2em] text-teak text-xs">Nasi Campur counter</p>
         <h2 className="font-display text-4xl mb-4">3-second plate</h2>
-        <p className="mb-4 text-sm">Set portion qty, then send to the table bill. No rice charge. Tap +50¢ as many times as needed for extra / bigger meat.</p>
+        <p className="mb-4 text-sm">Set portion qty, then send to the table bill. No rice charge. Extra / bigger uses the editable extra price. Dish names and prices are stored on this phone.</p>
+        <div className="flex flex-wrap gap-2 mb-4">
+          <button type="button" onClick={() => setEditCampur((v) => !v)} className={`px-3 py-2 rounded-xl text-sm font-bold ${editCampur ? "bg-ink text-kraft" : "bg-white"}`}>
+            {editCampur ? "Done editing" : "Edit dishes & prices"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCampur(defaultCampurCatalog());
+              ping("Nasi Campur menu reset");
+            }}
+            className="px-3 py-2 rounded-xl bg-white text-sm"
+          >
+            Reset list
+          </button>
+        </div>
+        {editCampur ? (
+          <label className="flex items-center gap-2 mb-4 text-sm bg-white rounded-xl px-3 py-2 w-fit">
+            Extra / bigger
+            <input
+              type="number"
+              min="0"
+              step="0.10"
+              value={campur.extraPrice}
+              onChange={(e) => setCampur((prev) => ({ ...prev, extraPrice: Math.max(0, Math.round((Number(e.target.value) || 0) * 100) / 100) }))}
+              className="w-20 bg-kraft rounded-lg px-2 py-1 border border-ink/20"
+            />
+          </label>
+        ) : null}
         <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 mb-4">
           {TABLES.map((t) => (
             <button key={t} onClick={() => setPosTable(t)} className={`py-2 rounded-lg ${posTable === t ? "bg-ink text-kraft" : "bg-white"}`}>
@@ -415,15 +493,33 @@ export default function App() {
           <div className="mb-5" />
         )}
         <h3 className="font-bold mb-2">Protein</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-5">
-          {PROTEINS.map((p) => {
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
+          {campur.proteins.map((p) => {
             const qty = posQty[p.id] || 0;
             const extras = qty && p.extra ? posExtra[p.id] || 0 : 0;
             return (
               <div key={p.id} className={`p-4 rounded-2xl text-left ${qty ? "bg-chili text-white" : "bg-white"}`}>
-                <p className="font-bold">{p.name}</p>
-                <p>{money(p.price)} · {qty} portion{qty === 1 ? "" : "s"}</p>
-                {p.extra ? <p className="text-xs opacity-80 mt-1">+{money(EXTRA)} extra / bigger</p> : null}
+                {editCampur ? (
+                  <div className="space-y-2 mb-2">
+                    <input value={p.name} onChange={(e) => patchCampurItem("proteins", p.id, { name: e.target.value })} className="w-full rounded-lg px-2 py-1 text-ink text-sm" />
+                    <input type="number" min="0" step="0.10" value={p.price} onChange={(e) => patchCampurItem("proteins", p.id, { price: Math.max(0, Math.round((Number(e.target.value) || 0) * 100) / 100) })} className="w-full rounded-lg px-2 py-1 text-ink text-sm" />
+                    <label className={`flex items-center gap-2 text-xs ${qty ? "text-white" : "text-ink"}`}>
+                      <input type="checkbox" checked={!!p.extra} onChange={(e) => patchCampurItem("proteins", p.id, { extra: e.target.checked })} />
+                      Extra / bigger
+                    </label>
+                    <button type="button" onClick={() => removeCampurItem("proteins", p.id)} className="text-xs underline">
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <p className="font-bold">{p.name}</p>
+                    <p>
+                      {money(p.price)} · {qty} portion{qty === 1 ? "" : "s"}
+                    </p>
+                    {p.extra ? <p className="text-xs opacity-80 mt-1">+{money(campur.extraPrice)} extra / bigger</p> : null}
+                  </>
+                )}
                 <div className="mt-2 flex items-center gap-1">
                   <button type="button" onClick={() => bumpPosQty(p.id, -1)} disabled={qty < 1} className={`w-8 h-8 rounded-full font-bold ${qty ? "bg-white/20" : "bg-ink/10"}`}>
                     −
@@ -439,7 +535,7 @@ export default function App() {
                       −
                     </button>
                     <span className={`flex-1 text-xs font-bold text-center px-2 py-2 rounded-full ${extras ? "bg-kraft text-ink" : qty ? "bg-white/20" : "bg-ink/10 text-ink/40"}`}>
-                      +50¢ ×{extras}
+                      +{money(campur.extraPrice)} ×{extras}
                     </span>
                     <button type="button" disabled={!qty} onClick={() => bumpExtra(p.id, 1)} className={`w-8 h-8 rounded-full font-bold ${qty ? "bg-kraft text-ink" : "bg-ink/10 text-ink/40"}`}>
                       +
@@ -450,14 +546,37 @@ export default function App() {
             );
           })}
         </div>
-        <h3 className="font-bold mb-2">Add-on · Veggie and condiments · $1.00 each</h3>
-        <div className="flex flex-wrap gap-2 mb-8">
-          {VEGGIES.map((v) => {
+        {editCampur ? (
+          <button type="button" onClick={() => addCampurItem("proteins")} className="mb-5 px-3 py-2 rounded-xl bg-white text-sm font-bold">
+            Add protein
+          </button>
+        ) : (
+          <div className="mb-5" />
+        )}
+        <h3 className="font-bold mb-2">Vegetable and condiments</h3>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {campur.addons.map((v) => {
             const qty = posQty[v.id] || 0;
-            const extras = qty ? posExtra[v.id] || 0 : 0;
+            const extras = qty && v.extra ? posExtra[v.id] || 0 : 0;
             return (
-              <div key={v.id} className={`rounded-2xl px-3 py-2 ${qty ? "chip-on" : "bg-white"}`}>
-                <p className="font-bold text-sm">{v.name}</p>
+              <div key={v.id} className={`rounded-2xl px-3 py-2 min-w-[11rem] ${qty ? "chip-on" : "bg-white"}`}>
+                {editCampur ? (
+                  <div className="space-y-1 mb-1">
+                    <input value={v.name} onChange={(e) => patchCampurItem("addons", v.id, { name: e.target.value })} className="w-full rounded-lg px-2 py-1 text-ink text-sm" />
+                    <input type="number" min="0" step="0.10" value={v.price} onChange={(e) => patchCampurItem("addons", v.id, { price: Math.max(0, Math.round((Number(e.target.value) || 0) * 100) / 100) })} className="w-full rounded-lg px-2 py-1 text-ink text-sm" />
+                    <label className="flex items-center gap-2 text-xs">
+                      <input type="checkbox" checked={!!v.extra} onChange={(e) => patchCampurItem("addons", v.id, { extra: e.target.checked })} />
+                      Extra / bigger
+                    </label>
+                    <button type="button" onClick={() => removeCampurItem("addons", v.id)} className="text-xs underline">
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <p className="font-bold text-sm">
+                    {v.name} · {money(v.price)}
+                  </p>
+                )}
                 <div className="flex items-center gap-1 mt-1">
                   <button type="button" onClick={() => bumpPosQty(v.id, -1)} disabled={qty < 1} className="w-7 h-7 rounded-full font-bold bg-white/70">
                     −
@@ -466,18 +585,31 @@ export default function App() {
                   <button type="button" onClick={() => bumpPosQty(v.id, 1)} className="w-7 h-7 rounded-full font-bold bg-white/70">
                     +
                   </button>
-                  <button type="button" disabled={!qty || extras < 1} onClick={() => bumpExtra(v.id, -1)} className="w-7 h-7 rounded-full font-bold bg-white/70">
-                    −
-                  </button>
-                  <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${extras ? "bg-chili text-white" : "bg-white/70 text-ink"}`}>+50¢ ×{extras}</span>
-                  <button type="button" disabled={!qty} onClick={() => bumpExtra(v.id, 1)} className="w-7 h-7 rounded-full font-bold bg-white/70">
-                    +
-                  </button>
+                  {v.extra ? (
+                    <>
+                      <button type="button" disabled={!qty || extras < 1} onClick={() => bumpExtra(v.id, -1)} className="w-7 h-7 rounded-full font-bold bg-white/70">
+                        −
+                      </button>
+                      <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${extras ? "bg-chili text-white" : "bg-white/70 text-ink"}`}>
+                        +{money(campur.extraPrice)} ×{extras}
+                      </span>
+                      <button type="button" disabled={!qty} onClick={() => bumpExtra(v.id, 1)} className="w-7 h-7 rounded-full font-bold bg-white/70">
+                        +
+                      </button>
+                    </>
+                  ) : null}
                 </div>
               </div>
             );
           })}
         </div>
+        {editCampur ? (
+          <button type="button" onClick={() => addCampurItem("addons")} className="mb-8 px-3 py-2 rounded-xl bg-white text-sm font-bold">
+            Add vegetable or condiment
+          </button>
+        ) : (
+          <div className="mb-8" />
+        )}
         <button onClick={sendPlate} disabled={sending} className="w-full bg-ink text-kraft rounded-2xl py-4 text-xl font-display ticket">
           Send plate · Table {posTable} · {money(posGrand)}
           {posType === "bungkus" ? " incl. packing" : ""}
@@ -873,7 +1005,7 @@ export default function App() {
                     setTable(t);
                     setQuery("menu", t || undefined);
                   }}
-                  className="ml-2 bg-white rounded-lg px-2 py-1 border border-ink/20"
+                  className="ml-2 guest-surface rounded-lg px-2 py-1"
                 >
                   <option value="">Select</option>
                   {TABLES.map((t) => (
@@ -884,11 +1016,11 @@ export default function App() {
                 </select>
               </label>
             )}
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search menu" className="flex-1 min-w-[160px] bg-white rounded-lg px-3 py-2 border border-ink/20" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search menu" className="flex-1 min-w-[160px] guest-surface rounded-lg px-3 py-2" />
           </div>
           <div className="flex gap-2 overflow-x-auto pb-3 mb-4">
             {CATS.map((c) => (
-              <button key={c} onClick={() => setCat(c)} className={`whitespace-nowrap px-3 py-1 rounded-full border ${cat === c ? "chip-on" : "bg-white border-ink/15"}`}>
+              <button key={c} onClick={() => setCat(c)} className={`whitespace-nowrap px-3 py-1 rounded-full ${cat === c ? "guest-chip-on" : "guest-chip"}`}>
                 {c}
               </button>
             ))}
@@ -905,19 +1037,19 @@ export default function App() {
                     const temp = choice[item.id + "-t"] || "Hot";
                     const qty = trayQtyFor(item);
                     return (
-                      <article key={item.id} className="bg-white/80 border border-ink/10 rounded-2xl p-4">
+                      <article key={item.id} className="guest-card">
                         <div className="flex justify-between gap-3">
                           <div>
                             <h3 className="font-bold text-lg">{item.name}</h3>
-                            {item.canned ? <p className="text-xs text-ink/60">Can · no bungkus packing</p> : null}
-                            {item.desc ? <p className="text-sm text-ink/70">{item.desc}</p> : null}
+                            {item.canned ? <p className="text-xs opacity-60">Can · no bungkus packing</p> : null}
+                            {item.desc ? <p className="text-sm opacity-70">{item.desc}</p> : null}
                           </div>
                           <p className="font-display text-xl">{item.hot != null ? money(item.hot) + " / " + money(item.cold!) : money(item.price!)}</p>
                         </div>
                         {item.options ? (
                           <div className="flex flex-wrap gap-2 mt-3">
                             {item.options.map((o) => (
-                              <button key={o} onClick={() => setChoice((c) => ({ ...c, [item.id]: o }))} className={`text-xs px-2 py-1 rounded-full border ${drink === o ? "chip-on" : "border-ink/20"}`}>
+                              <button key={o} onClick={() => setChoice((c) => ({ ...c, [item.id]: o }))} className={`text-xs px-2 py-1 rounded-full ${drink === o ? "guest-chip-on" : "guest-chip"}`}>
                                 {o}
                               </button>
                             ))}
@@ -926,18 +1058,18 @@ export default function App() {
                         {item.hot != null ? (
                           <div className="flex gap-2 mt-3">
                             {["Hot", "Cold"].map((t) => (
-                              <button key={t} onClick={() => setChoice((c) => ({ ...c, [item.id + "-t"]: t }))} className={`text-xs px-2 py-1 rounded-full border ${temp === t ? "chip-on" : "border-ink/20"}`}>
+                              <button key={t} onClick={() => setChoice((c) => ({ ...c, [item.id + "-t"]: t }))} className={`text-xs px-2 py-1 rounded-full ${temp === t ? "guest-chip-on" : "guest-chip"}`}>
                                 {t}
                               </button>
                             ))}
                           </div>
                         ) : null}
                         <div className="mt-3 flex items-center gap-2">
-                          <button type="button" disabled={qty < 1} onClick={() => bumpItem(item, -1)} className="w-10 h-10 rounded-xl bg-white border border-ink/20 font-bold text-xl disabled:opacity-40">
+                          <button type="button" disabled={qty < 1} onClick={() => bumpItem(item, -1)} className="w-10 h-10 rounded-xl guest-chip font-bold text-xl disabled:opacity-40">
                             −
                           </button>
                           <span className="flex-1 text-center font-bold text-lg">{qty}</span>
-                          <button type="button" onClick={() => bumpItem(item, 1)} className="w-10 h-10 rounded-xl bg-chili text-white font-bold text-xl">
+                          <button type="button" onClick={() => bumpItem(item, 1)} className="w-10 h-10 rounded-xl guest-plus font-bold text-xl">
                             +
                           </button>
                         </div>
@@ -949,13 +1081,13 @@ export default function App() {
             );
           })}
         </main>
-        <div className="fixed bottom-0 inset-x-0 z-40 border-t-4 border-chili bg-kraft/95 px-4 py-3">
+        <div className="guest-dock fixed bottom-0 inset-x-0 z-40 px-4 py-3">
           <p className="text-center font-bold text-sm mb-2">How do you want this order?</p>
           <div className="max-w-md mx-auto grid grid-cols-2 gap-2 mb-2">
-            <button onClick={() => pickOrderType("dine_in")} className={`py-3 rounded-2xl font-bold text-lg ${orderType === "dine_in" ? "bg-pandan text-white" : "bg-white border-2 border-ink/20"}`}>
+            <button onClick={() => pickOrderType("dine_in")} className={`py-3 rounded-2xl font-bold text-lg ${orderType === "dine_in" ? "guest-ok" : "guest-chip"}`}>
               Dine-In
             </button>
-            <button onClick={() => pickOrderType("bungkus")} className={`py-3 rounded-2xl font-bold text-lg ${orderType === "bungkus" ? "bg-chili text-white" : "bg-white border-2 border-ink/20"}`}>
+            <button onClick={() => pickOrderType("bungkus")} className={`py-3 rounded-2xl font-bold text-lg ${orderType === "bungkus" ? "guest-plus" : "guest-chip"}`}>
               Bungkus
             </button>
           </div>
@@ -964,7 +1096,7 @@ export default function App() {
               Bungkus adds {money(PACKING)} packing per item, not canned drinks ({guestPackCount} × {money(PACKING)} = {money(guestPacking)}).
             </p>
           ) : null}
-          <button onClick={() => setModal(true)} className="max-w-md mx-auto block w-full bg-ink text-kraft rounded-2xl px-4 py-3 font-bold">
+          <button onClick={() => setModal(true)} className="max-w-md mx-auto block w-full guest-chip-on rounded-2xl px-4 py-3 font-bold">
             <i className="fa-solid fa-bowl-food mr-2" />
             Checkout tray {trayCount} · {money(guestTotal)}
             {orderType ? " · " + (orderType === "bungkus" ? "Bungkus" : "Dine-In") : ""}
@@ -972,7 +1104,7 @@ export default function App() {
         </div>
         {modal ? (
           <div className="fixed inset-0 bg-ink/50 z-50 flex items-end sm:items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && setModal(false)}>
-            <div className="bg-kraft w-full max-w-md rounded-3xl p-5">
+            <div className="guest-modal w-full max-w-md p-5">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="font-display text-2xl">Table {table || "--"} tray</h3>
                 <button onClick={() => setModal(false)}>
@@ -987,18 +1119,18 @@ export default function App() {
                       <p className="text-sm">{money(t.price)}{t.pack === false ? " · can, no packing" : ""}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button className="w-8 h-8 rounded-full bg-white" onClick={() => setTray((prev) => prev.map((x) => (x.name === t.name ? { ...x, qty: x.qty - 1 } : x)).filter((x) => x.qty > 0))}>
+                      <button className="w-8 h-8 rounded-full guest-chip" onClick={() => setTray((prev) => prev.map((x) => (x.name === t.name ? { ...x, qty: x.qty - 1 } : x)).filter((x) => x.qty > 0))}>
                         -
                       </button>
                       <span>{t.qty}</span>
-                      <button className="w-8 h-8 rounded-full bg-white" onClick={() => setTray((prev) => prev.map((x) => (x.name === t.name ? { ...x, qty: x.qty + 1 } : x)))}>
+                      <button className="w-8 h-8 rounded-full guest-chip" onClick={() => setTray((prev) => prev.map((x) => (x.name === t.name ? { ...x, qty: x.qty + 1 } : x)))}>
                         +
                       </button>
                     </div>
                   </div>
                 ))
               ) : (
-                <p className="text-ink/70">Nothing in the tray yet.</p>
+                <p className="opacity-70">Nothing in the tray yet.</p>
               )}
               {orderType === "bungkus" && guestPackCount ? (
                 <div className="flex items-center justify-between py-2 border-b border-ink/10 text-chili">
@@ -1010,17 +1142,17 @@ export default function App() {
                 Dine-In or Bungkus <span className="text-chili">*</span>
               </p>
               <div className="grid grid-cols-2 gap-2 mt-2">
-                <button onClick={() => pickOrderType("dine_in")} className={`py-4 rounded-2xl font-bold text-lg ${orderType === "dine_in" ? "bg-pandan text-white" : "bg-white border-2 border-ink/20"}`}>
+                <button onClick={() => pickOrderType("dine_in")} className={`py-4 rounded-2xl font-bold text-lg ${orderType === "dine_in" ? "guest-ok" : "guest-chip"}`}>
                   Dine-In
                 </button>
-                <button onClick={() => pickOrderType("bungkus")} className={`py-4 rounded-2xl font-bold text-lg ${orderType === "bungkus" ? "bg-chili text-white" : "bg-white border-2 border-ink/20"}`}>
+                <button onClick={() => pickOrderType("bungkus")} className={`py-4 rounded-2xl font-bold text-lg ${orderType === "bungkus" ? "guest-plus" : "guest-chip"}`}>
                   Bungkus
                 </button>
               </div>
               {orderType === "bungkus" ? (
                 <p className="mt-2 text-sm font-bold text-chili">Alert: bungkus includes {money(PACKING)} packing per item. Canned drinks have no packing fee.</p>
               ) : null}
-              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full mt-3 rounded-xl p-3 text-sm" placeholder="Kitchen notes" />
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full mt-3 rounded-xl p-3 text-sm guest-chip" placeholder="Kitchen notes" />
               <button
                 onClick={submitGuest}
                 disabled={sending || !orderType}
@@ -1036,7 +1168,7 @@ export default function App() {
   }
 
   return (
-    <div>
+    <div className={isStaffView(view) ? undefined : "guest-shell"}>
       {isStaffView(view) ? nav : guestHeader}
       {view === "menu" || view === "pos" ? lastCallBanner : null}
       {page}
