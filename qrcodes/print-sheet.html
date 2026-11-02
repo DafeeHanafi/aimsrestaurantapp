@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aims Solution IFM — Table QR stickers</title>
+  <style>
+    @page { size: A4; margin: 8mm; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+      color: #111;
+      background: #fff;
+    }
+    .print-bar {
+      max-width: 210mm;
+      margin: 12px auto;
+      padding: 0 8mm;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .print-bar p { margin: 0; font-size: 13px; color: #333; }
+    .print-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    button, a.btn {
+      font: inherit;
+      padding: 8px 14px;
+      cursor: pointer;
+      border: 1px solid #222;
+      background: #111;
+      color: #fff;
+      border-radius: 6px;
+      text-decoration: none;
+      display: inline-block;
+    }
+    a.btn.secondary {
+      background: #fff;
+      color: #111;
+    }
+    .dl-png {
+      margin: 1mm 0 0;
+      font-size: 7pt;
+      color: #0b57d0;
+      text-decoration: underline;
+    }
+    .sheet {
+      width: 194mm;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(5, 50mm);
+      gap: 2.5mm;
+    }
+    .sticker {
+      border: 1px dashed #888;
+      border-radius: 4mm;
+      padding: 2mm 2mm 1.5mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      text-align: center;
+      overflow: hidden;
+    }
+    .brand {
+      margin: 0;
+      font-size: 9pt;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      line-height: 1.15;
+    }
+    .venue {
+      margin: 0.4mm 0 0;
+      font-size: 8pt;
+      color: #444;
+      line-height: 1.15;
+    }
+    .table-label {
+      margin: 1mm 0 0;
+      font-size: 7.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #555;
+    }
+    .table-num {
+      margin: 0;
+      font-size: 20pt;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: 0.04em;
+    }
+    .qr {
+      width: 24mm;
+      height: 24mm;
+      margin-top: 1mm;
+      image-rendering: pixelated;
+    }
+    .hint {
+      margin: 0.8mm 0 0;
+      font-size: 7pt;
+      color: #555;
+    }
+    @media print {
+      .print-bar, .dl-png { display: none; }
+      .sheet { margin: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-bar">
+    <p>20 table QR stickers · A4 · cut on dashed lines</p>
+    <div class="print-actions">
+      <a class="btn" href="aims-ifm-table-qrcodes.zip" download="aims-ifm-table-qrcodes.zip">Download all (zip)</a>
+      <button type="button" onclick="window.print()">Print</button>
+    </div>
+  </div>
+  <section class="sheet">
+    
+    <article class="sticker">
+      <p class="brand">Aims Solution</p>
+      <p class="venue">IFM Kopitiam</p>
+      <p class="table-label">Table</p>
+      <p class="table-num">01</p>
+      <img class="qr" src="table-01.png" alt="QR code for table 01" />
+      <p class="hint">Scan to order</p>
+    </article>
+    <article class="sticker">
+      <p class="brand">Aims Solution</p>
+      <p class="venue">IFM Kopitiam</p>
+      <p class="table-label">Table</p>
+      <p class="table-num">02</p>
+      <img class="qr" src="table-02.png" alt="QR code for table 02" />
+      <p class="hint">Scan to order</p>
+    </article>
+    <article class="sticker">
+      <p class="brand">Aims Solution</p>
+      <p class="venue">IFM Kopitiam</p>
+      <p class="table-label">Table</p>
+      <p class="table-num">03</p>
+      <img class="qr" src="table-03.png" alt="QR code for table 03" />
+      <p class="hint">Scan to order</p>
+    </article>
+    <article class="sticker">
+      <p class="brand">Aims Solution</p>
+      <p class="venue">IFM Kopitiam</p>
+      <p class="table-label">Table</p>
+      <p class="table-num">04</p>
+      <img class="qr" src="table-04.png" alt="QR code for table 04" />
+      <p class="hint">Scan to order</p>
+    </article>
+    <article class="sticker">
+      <p class="brand">Aims Solution</p>
+      <p class="venue">IFM Kopitiam</p>
+      <p class="table-label">Table</p>
+      <p class="table-num">05</p>
+      <img class="qr" src="table-05.png" alt="QR code for table 05" />
+      <p class="hint">Scan to order</p>
+    </article>
+    <article class="sticker">
+      <p class="brand">Aims Solution</p>
+      <p class="venue">IFM Kopitiam</p>
+      <p class="table-label">Table</p>
+      <p class="table-num">06</p>
+      <img class="qr" src="table-06.png" alt="QR code for table 06" />
+      <p class="hint">Scan to order</p>
+    </article>
+    <article class="sticker">
+      <p class="brand">Aims Solution</p>
+      <p class="venue">IFM Kopitiam</p>
+      <p class="table-label">Table</p>
+      <p class="table-num">07</p>
+      <img class="qr" src="table-07.png" alt="QR code for table 07" />
+      <p class="hint">Scan to order</p>
+    </article>
+    <article class="sticker">
+      <p class="brand">Aims Solution</p>
+      <p class="venue">IFM Kopitiam</p>
+      <p class="table-label">Table</p>
+      <p class="table-num">08</p>
+      <img class="qr" src="table-08.png" alt="QR code for table 08" />
+      <p class="hint">Scan to order</p>
+    </article>
+    <article class="sticker">
+      <p class="brand">Aims Solution</p>
+      <p class="venue">IFM Kopitiam</p>
+      <p class="table-label">Table</p>
+      <p class="table-num">09</p>
+      <img class="qr" src="table-09.png" alt="QR code for table 09" />
+      <p class="hint">Scan to order</p>
+    </article>
+    <article class="sticker">
+      <p class="brand">Aims Solution</p>
+      <p class="venue">IFM Kopitiam</p>
+      <p class="table-label">Table</p>
+      <p class="table-num">10</p>
+      <img class="qr" src="table-10.png" alt="QR code for table 10" />
+      <p class="hint">Scan to order</p>
+    </article>
+    <article class="sticker">
+      <p class="brand">Aims Solution</p>
+      <p class="venue">IFM Kopitiam</p>
+      <p class="table-label">Table</p>
+      <p class="table-num">11</p>
+      <img class="qr" src="table-11.png" alt="QR code for table 11" />
+      <p class="hint">Scan to order</p>
+    </article>
+    <article class="sticker">
+      <p class="brand">Aims Solution</p>
+      <p class="venue">IFM Kopitiam</p>
+      <p class="table-label">Table</p>
+      <p class="table-num">12</p>
+      <img class="qr" src="table-12.png" alt="QR code for table 12" />
+      <p class="hint">Scan to order</p>
+    </article>
+    <article class="sticker">
+      <p class="brand">Aims Solution</p>
+      <p class="venue">IFM Kopitiam</p>
+      <p class="table-label">Table</p>
+      <p class="table-num">13</p>
+      <img class="qr" src="table-13.png" alt="QR code for table 13" />
+      <p class="hint">Scan to order</p>
+    </article>
+    <article class="sticker">
+      <p class="brand">Aims Solution</p>
+      <p class="venue">IFM Kopitiam</p>
+      <p class="table-label">Table</p>
+      <p class="table-num">14</p>
+      <img class="qr" src="table-14.png" alt="QR code for table 14" />
+      <p class="hint">Scan to order</p>
+    </article>
+    <article class="sticker">
+      <p class="brand">Aims Solution</p>
+      <p class="venue">IFM Kopitiam</p>
+      <p class="table-label">Table</p>
+      <p class="table-num">15</p>
+      <img class="qr" src="table-15.png" alt="QR code for table 15" />
+      <p class="hint">Scan to order</p>
+    </article>
+    <article class="sticker">
+      <p class="brand">Aims Solution</p>
+      <p class="venue">IFM Kopitiam</p>
+      <p class="table-label">Table</p>
+      <p class="table-num">16</p>
+      <img class="qr" src="table-16.png" alt="QR code for table 16" />
+      <p class="hint">Scan to order</p>
+    </article>
+    <article class="sticker">
+      <p class="brand">Aims Solution</p>
+      <p class="venue">IFM Kopitiam</p>
+      <p class="table-label">Table</p>
+      <p class="table-num">17</p>
+      <img class="qr" src="table-17.png" alt="QR code for table 17" />
+      <p class="hint">Scan to order</p>
+    </article>
+    <article class="sticker">
+      <p class="brand">Aims Solution</p>
+      <p class="venue">IFM Kopitiam</p>
+      <p class="table-label">Table</p>
+      <p class="table-num">18</p>
+      <img class="qr" src="table-18.png" alt="QR code for table 18" />
+      <p class="hint">Scan to order</p>
+    </article>
+    <article class="sticker">
+      <p class="brand">Aims Solution</p>
+      <p class="venue">IFM Kopitiam</p>
+      <p class="table-label">Table</p>
+      <p class="table-num">19</p>
+      <img class="qr" src="table-19.png" alt="QR code for table 19" />
+      <p class="hint">Scan to order</p>
+    </article>
+    <article class="sticker">
+      <p class="brand">Aims Solution</p>
+      <p class="venue">IFM Kopitiam</p>
+      <p class="table-label">Table</p>
+      <p class="table-num">20</p>
+      <img class="qr" src="table-20.png" alt="QR code for table 20" />
+      <p class="hint">Scan to order</p>
+    </article>
+  </section>
+  <script>
+    document.querySelectorAll("img.qr").forEach(function (img) {
+      var file = img.getAttribute("src");
+      var a = document.createElement("a");
+      a.className = "dl-png";
+      a.href = file;
+      a.download = "aims-ifm-" + file;
+      a.textContent = "Download PNG";
+      img.insertAdjacentElement("afterend", a);
+    });
+  </script>
+</body>
+</html>

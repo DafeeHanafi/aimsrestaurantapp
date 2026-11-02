@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   CATS,
@@ -17,18 +17,26 @@ import {
   saveCampurCatalog,
   type CampurItem
 } from "./lib/menu";
-import { businessDate, downloadSalesCsv, money, ticketCall, typeLabel } from "./lib/format";
+import { campurSoldKey, isSold, loadSoldOut, menuSoldKey, saveSoldOut } from "./lib/floorBoard";
+import { businessDate, downloadSalesCsv, kitchenWord, money, ticketCall, typeLabel } from "./lib/format";
 import {
   closeTableBill,
   insertOrder,
   loadDayClose,
+  loadOpenOrdersForTable,
   loadOrdersWithItems,
   toSalesRows,
   trayAsItems,
   upsertDayClose
 } from "./lib/orders";
+import { lockStaff, staffUnlocked, unlockStaff } from "./lib/staffGate";
 import { connectBackend } from "./lib/supabase";
+import { normalizeTable } from "./lib/tableSession";
 import type { DayClose, MenuItem, Order, OrderType, SalesRow, TrayLine, View } from "./lib/types";
+
+function AimsMark({ size = 88 }: { size?: number }) {
+  return <img src="/aims-logo.svg" alt="Aims Solution" width={size} height={size} className="aims-logo" />;
+}
 
 function isStaffView(v: View) {
   return v === "pos" || v === "kds" || v === "bill" || v === "z" || v === "accounts";
@@ -42,14 +50,15 @@ function parseView(): View {
 }
 
 function parseTable() {
-  return new URLSearchParams(location.search).get("table") || "";
+  return normalizeTable(new URLSearchParams(location.search).get("table"));
 }
 
 function setQuery(view: View, table?: string) {
   const p = new URLSearchParams(location.search);
   if (isStaffView(view)) p.set("view", view);
   else p.delete("view");
-  if (table) p.set("table", table);
+  const safeTable = normalizeTable(table);
+  if (safeTable) p.set("table", safeTable);
   else p.delete("table");
   const q = p.toString();
   history.replaceState({}, "", q ? "?" + q : location.pathname);
@@ -90,6 +99,24 @@ export default function App() {
   const [billLoading, setBillLoading] = useState(false);
   const [billError, setBillError] = useState("");
   const [dayClose, setDayClose] = useState<DayClose | null>(null);
+  const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
+  const [guestTickets, setGuestTickets] = useState<Order[]>([]);
+  const [posTickets, setPosTickets] = useState<Order[]>([]);
+  const [soldOut, setSoldOut] = useState<string[]>(loadSoldOut);
+  const [guestConfirm, setGuestConfirm] = useState(false);
+  const [posConfirm, setPosConfirm] = useState(false);
+  const [guestSplash, setGuestSplash] = useState(() => parseView() === "menu");
+  const [staffOk, setStaffOk] = useState(staffUnlocked);
+  const [staffPw, setStaffPw] = useState("");
+  const [staffErr, setStaffErr] = useState("");
+  const sendingRef = useRef(false);
+  const floorRef = useRef<{ send: (args: { type: "broadcast"; event: string; payload: { ids: string[] } }) => Promise<unknown> } | null>(null);
+  const viewRef = useRef(view);
+  const billTableRef = useRef(billTable);
+  const tableRef = useRef(table);
+  viewRef.current = view;
+  billTableRef.current = billTable;
+  tableRef.current = table;
 
   const ping = useCallback((msg: string) => {
     setToast(msg);
@@ -97,14 +124,14 @@ export default function App() {
   }, []);
 
   const go = useCallback((next: View, extraTable?: string) => {
-    const t = extraTable || table;
+    const t = normalizeTable(extraTable || table);
     setView(next);
     if (extraTable) {
-      setTable(extraTable);
-      setBillTable(extraTable);
-      setPosTable(extraTable);
+      setTable(t);
+      setBillTable(t || "01");
+      setPosTable(t || "01");
     }
-    setQuery(next, extraTable || table || undefined);
+    setQuery(next, t || undefined);
   }, [table]);
 
   useEffect(() => {
@@ -146,6 +173,19 @@ export default function App() {
     setSalesLoading(false);
   }, []);
 
+  const loadGuestOpen = useCallback(async (client: SupabaseClient, tbl: string) => {
+    const safe = normalizeTable(tbl);
+    if (!safe) {
+      setGuestTickets([]);
+      return;
+    }
+    try {
+      setGuestTickets(await loadOpenOrdersForTable(client, safe));
+    } catch {
+      setGuestTickets([]);
+    }
+  }, []);
+
   const loadBill = useCallback(async (client: SupabaseClient, tbl: string) => {
     setBillLoading(true);
     setBillError("");
@@ -170,42 +210,95 @@ export default function App() {
       from.setDate(from.getDate() - 29);
       setSalesFrom(businessDate(from.toISOString()));
       setSalesTo(today);
+      let tick: number | undefined;
+      const refreshLive = () => {
+        window.clearTimeout(tick);
+        tick = window.setTimeout(() => {
+          const v = viewRef.current;
+          if (v === "kds") loadTickets(client);
+          if (v === "accounts" || v === "z") loadSales(client);
+          if (v === "bill") loadBill(client, billTableRef.current);
+          if (v === "menu" && tableRef.current) loadGuestOpen(client, tableRef.current);
+        }, 250);
+      };
       const channel = client
         .channel("kds-live")
-        .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => {
-          const v = parseView();
-          if (v === "kds") loadTickets(client);
-          if (v === "accounts" || v === "z") loadSales(client);
-          if (v === "bill") loadBill(client, parseTable() || "04");
-        })
-        .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, () => {
-          const v = parseView();
-          if (v === "kds") loadTickets(client);
-          if (v === "accounts" || v === "z") loadSales(client);
-          if (v === "bill") loadBill(client, parseTable() || "04");
-        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, refreshLive)
+        .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, refreshLive)
         .subscribe();
+      const floor = client
+        .channel("floor-board")
+        .on("broadcast", { event: "sold-out" }, ({ payload }) => {
+          const ids = Array.isArray(payload?.ids) ? payload.ids.map(String) : [];
+          saveSoldOut(ids);
+          setSoldOut(ids);
+        })
+        .on("broadcast", { event: "ask" }, () => {
+          floor.send({ type: "broadcast", event: "sold-out", payload: { ids: loadSoldOut() } });
+        })
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            setSoldOut(loadSoldOut());
+            floor.send({ type: "broadcast", event: "ask", payload: {} });
+          }
+        });
+      floorRef.current = floor;
       unsub = () => {
+        window.clearTimeout(tick);
+        floorRef.current = null;
         client.removeChannel(channel);
+        client.removeChannel(floor);
       };
       const v = parseView();
       if (v === "kds") await loadTickets(client);
       else if (v === "accounts" || v === "z") await loadSales(client);
-      else if (v === "bill") await loadBill(client, parseTable() || "04");
+      else if (v === "bill") await loadBill(client, billTableRef.current);
+      else if (v === "menu" && tableRef.current) await loadGuestOpen(client, tableRef.current);
     })();
     return () => unsub?.();
-  }, [loadBill, loadSales, loadTickets]);
+  }, [loadBill, loadGuestOpen, loadSales, loadTickets]);
 
   useEffect(() => {
     if (!sb) return;
     if (view === "kds") loadTickets(sb);
     if (view === "accounts" || view === "z") loadSales(sb);
     if (view === "bill") loadBill(sb, billTable);
-  }, [view, billTable, sb, loadBill, loadSales, loadTickets]);
+    if (view === "menu" && table) loadGuestOpen(sb, table);
+    if (view === "pos") {
+      const safe = normalizeTable(posTable);
+      if (safe) loadOpenOrdersForTable(sb, safe).then(setPosTickets).catch(() => setPosTickets([]));
+      else setPosTickets([]);
+    }
+  }, [view, billTable, table, posTable, sb, loadBill, loadGuestOpen, loadSales, loadTickets]);
+
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
 
   useEffect(() => {
     saveCampurCatalog(campur);
   }, [campur]);
+
+  useEffect(() => {
+    setGuestConfirm(false);
+  }, [tray, orderType, table]);
+
+  useEffect(() => {
+    setPosConfirm(false);
+  }, [posQty, posTable, posType]);
+
+  useEffect(() => {
+    if (!guestSplash) return;
+    const t = window.setTimeout(() => setGuestSplash(false), 2400);
+    return () => window.clearTimeout(t);
+  }, [guestSplash]);
 
   const trayTotal = tray.reduce((s, i) => s + i.qty * i.price, 0);
   const campurLines = campur.proteins.concat(campur.addons);
@@ -229,6 +322,10 @@ export default function App() {
   }
 
   function bumpPosQty(id: string, delta: number) {
+    if (delta > 0 && isSold(soldOut, campurSoldKey(id))) {
+      ping("That dish is sold out");
+      return;
+    }
     setPosQty((prev) => {
       const next = Math.max(0, (prev[id] || 0) + delta);
       return { ...prev, [id]: next };
@@ -291,7 +388,24 @@ export default function App() {
     return tray.find((t) => t.name === name && t.price === price && (t.pack !== false) === pack)?.qty || 0;
   }
 
+  function toggleSold(key: string) {
+    setSoldOut((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      saveSoldOut(next);
+      floorRef.current?.send({ type: "broadcast", event: "sold-out", payload: { ids: next } });
+      return next;
+    });
+  }
+
   function bumpItem(item: MenuItem, delta: number) {
+    if (!normalizeTable(table)) {
+      ping("Scan the QR on your table first");
+      return;
+    }
+    if (delta > 0 && isSold(soldOut, menuSoldKey(item.id))) {
+      ping(item.name + " is sold out");
+      return;
+    }
     const { name, price, pack } = itemSpec(item);
     setTray((prev) => {
       const found = prev.find((t) => t.name === name && t.price === price && (t.pack !== false) === pack);
@@ -304,16 +418,33 @@ export default function App() {
 
   async function submitGuest() {
     if (!sb) return;
-    if (!table) return ping("Set a table number first");
+    if (!online) return ping("No signal. Food stays in the tray. Try Send again when it is back.");
+    const safeTable = normalizeTable(table);
+    if (!safeTable) return ping("Scan the QR sticker on your table");
     if (!tray.length) return ping("Tray is empty");
     if (!orderType) {
       setModal(true);
       return ping("Choose Dine-In or Bungkus");
     }
+    const blocked = MENU.flatMap((c) => c.items).filter((item) => isSold(soldOut, menuSoldKey(item.id)));
+    const blockedNames = new Set(blocked.map((item) => item.name));
+    const dropped = tray.filter((line) => [...blockedNames].some((name) => line.name === name || line.name.startsWith(name + " ·")));
+    if (dropped.length) {
+      setTray((prev) => prev.filter((line) => !dropped.includes(line)));
+      setGuestConfirm(false);
+      ping("Kitchen sold out some dishes. Check your tray.");
+      return;
+    }
+    if (!guestConfirm) {
+      setGuestConfirm(true);
+      return;
+    }
+    if (sendingRef.current) return;
+    sendingRef.current = true;
     setSending(true);
     try {
       const data = await insertOrder(sb, {
-        table_number: table,
+        table_number: safeTable,
         order_type: orderType,
         source: "guest",
         kitchen_notes: notes,
@@ -324,25 +455,40 @@ export default function App() {
       setNotes("");
       setOrderType("");
       setModal(false);
+      setGuestConfirm(false);
       const call = ticketCall(data);
       setLastCall(call);
-      ping("Sent " + call + " to kitchen");
-    } catch (e) {
-      ping(e instanceof Error ? e.message : String(e));
+      ping("Kitchen got it · " + call);
+      await loadGuestOpen(sb, safeTable);
+    } catch {
+      setGuestConfirm(false);
+      ping("Not sent. Tray is still here. Tap Send again.");
     }
+    sendingRef.current = false;
     setSending(false);
   }
 
   async function sendPlate() {
     if (!sb) return;
+    if (!online) return ping("No signal. Plate is still here. Try again when it is back.");
+    const safeTable = normalizeTable(posTable);
+    if (!safeTable) return ping("Pick a table 01–20");
     const proteinQty = campur.proteins.reduce((s, p) => s + (posQty[p.id] || 0), 0);
     if (!proteinQty) return ping("Pick a protein");
+    const blocked = campurLines.filter((p) => (posQty[p.id] || 0) > 0 && isSold(soldOut, campurSoldKey(p.id)));
+    if (blocked.length) return ping(blocked[0].name + " is sold out");
+    if (!posConfirm) {
+      setPosConfirm(true);
+      return;
+    }
+    if (sendingRef.current) return;
+    sendingRef.current = true;
     setSending(true);
     const items = campurLines.flatMap((p) => campurItems(p, posExtra[p.id] || 0, posQty[p.id] || 0, campur.extraPrice));
     if (posType === "bungkus") items.push(packingLine(posItemCount));
     try {
       const data = await insertOrder(sb, {
-        table_number: posTable,
+        table_number: safeTable,
         order_type: posType,
         source: "pos",
         kitchen_notes: "Nasi Campur plate",
@@ -351,12 +497,16 @@ export default function App() {
       });
       setPosQty({});
       setPosExtra({});
+      setPosConfirm(false);
       const call = ticketCall(data);
       setLastCall(call);
-      ping("Plate " + call + " on table " + posTable);
-    } catch (e) {
-      ping(e instanceof Error ? e.message : String(e));
+      ping("Kitchen got plate · " + call);
+      setPosTickets(await loadOpenOrdersForTable(sb, safeTable));
+    } catch {
+      setPosConfirm(false);
+      ping("Not sent. Plate is still here. Tap Send again.");
     }
+    sendingRef.current = false;
     setSending(false);
   }
 
@@ -376,12 +526,15 @@ export default function App() {
   const guestHeader = (
     <header className="guest-header sticky top-0 z-30">
       <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[11px] tracking-[0.25em] uppercase text-teak">Aims Solution</p>
-          <h1 className="font-display text-2xl leading-none">IFM Kopitiam</h1>
-          <p className="text-[10px] opacity-50">{backendLabel}</p>
+        <div className="flex items-center gap-3">
+          <AimsMark size={44} />
+          <div>
+            <p className="text-[11px] tracking-[0.25em] uppercase text-teak">Aims Solution</p>
+            <h1 className="font-display text-2xl leading-none">IFM Kopitiam</h1>
+            <p className="text-[10px] opacity-50">{backendLabel}</p>
+          </div>
         </div>
-        {table ? <p className="text-sm font-bold">Table {table}</p> : null}
+        {table ? <p className="text-sm font-bold">Table {table}</p> : <p className="text-sm font-bold text-chili">Scan table QR</p>}
       </div>
     </header>
   );
@@ -389,10 +542,13 @@ export default function App() {
   const nav = (
     <header className="sticky top-0 z-30 backdrop-blur bg-kraft/80 border-b border-ink/10">
       <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[11px] tracking-[0.25em] uppercase text-teak">Aims Solution</p>
-          <h1 className="font-display text-2xl leading-none">IFM Kopitiam</h1>
-          <p className="text-[10px] text-ink/50">{backendLabel}</p>
+        <div className="flex items-center gap-3">
+          <AimsMark size={44} />
+          <div>
+            <p className="text-[11px] tracking-[0.25em] uppercase text-teak">Aims Solution</p>
+            <h1 className="font-display text-2xl leading-none">IFM Kopitiam</h1>
+            <p className="text-[10px] text-ink/50">{backendLabel}</p>
+          </div>
         </div>
         <nav className="flex flex-wrap gap-1 justify-end">
           {(
@@ -413,6 +569,17 @@ export default function App() {
               {label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => {
+              lockStaff();
+              setStaffOk(false);
+              setStaffPw("");
+            }}
+            className="px-3 py-2 rounded-full text-sm bg-white/70"
+          >
+            Lock
+          </button>
         </nav>
       </div>
     </header>
@@ -471,11 +638,24 @@ export default function App() {
         ) : null}
         <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 mb-4">
           {TABLES.map((t) => (
-            <button key={t} onClick={() => setPosTable(t)} className={`py-2 rounded-lg ${posTable === t ? "bg-ink text-kraft" : "bg-white"}`}>
+            <button key={t} onClick={() => setPosTable(t)} className={`min-h-11 py-2 rounded-lg font-bold ${posTable === t ? "bg-ink text-kraft" : "bg-white"}`}>
               {t}
             </button>
           ))}
         </div>
+        {posTickets.length ? (
+          <div className="mb-4 bg-white rounded-2xl p-3">
+            <p className="text-xs uppercase tracking-[0.2em] text-teak">Kitchen · Table {posTable}</p>
+            <ul className="mt-1 text-sm space-y-1">
+              {posTickets.map((t) => (
+                <li key={t.id} className="flex justify-between gap-2">
+                  <span className="font-bold">{ticketCall(t)}</span>
+                  <span>{kitchenWord(t.status)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <div className="flex gap-2 mb-3">
           <button onClick={() => pickOrderType("dine_in", true)} className={`px-4 py-2 rounded-xl ${posType === "dine_in" ? "bg-pandan text-white" : "bg-white"}`}>
             Dine-In
@@ -496,8 +676,9 @@ export default function App() {
           {campur.proteins.map((p) => {
             const qty = posQty[p.id] || 0;
             const extras = qty && p.extra ? posExtra[p.id] || 0 : 0;
+            const gone = isSold(soldOut, campurSoldKey(p.id));
             return (
-              <div key={p.id} className={`p-4 rounded-2xl text-left ${qty ? "bg-chili text-white" : "bg-white"}`}>
+              <div key={p.id} className={`p-4 rounded-2xl text-left ${gone ? "opacity-50 bg-white" : qty ? "bg-chili text-white" : "bg-white"}`}>
                 {editCampur ? (
                   <div className="space-y-2 mb-2">
                     <input value={p.name} onChange={(e) => patchCampurItem("proteins", p.id, { name: e.target.value })} className="w-full rounded-lg px-2 py-1 text-ink text-sm" />
@@ -512,19 +693,22 @@ export default function App() {
                   </div>
                 ) : (
                   <>
-                    <p className="font-bold">{p.name}</p>
+                    <p className="font-bold">{p.name}{gone ? " · sold out" : ""}</p>
                     <p>
                       {money(p.price)} · {qty} portion{qty === 1 ? "" : "s"}
                     </p>
                     {p.extra ? <p className="text-xs opacity-80 mt-1">+{money(campur.extraPrice)} extra / bigger</p> : null}
                   </>
                 )}
+                <button type="button" onClick={() => toggleSold(campurSoldKey(p.id))} className="mt-2 text-xs underline">
+                  {gone ? "Back on menu" : "Sold out"}
+                </button>
                 <div className="mt-2 flex items-center gap-1">
-                  <button type="button" onClick={() => bumpPosQty(p.id, -1)} disabled={qty < 1} className={`w-8 h-8 rounded-full font-bold ${qty ? "bg-white/20" : "bg-ink/10"}`}>
+                  <button type="button" onClick={() => bumpPosQty(p.id, -1)} disabled={qty < 1} className={`w-11 h-11 rounded-full font-bold ${qty ? "bg-white/20" : "bg-ink/10"}`}>
                     −
                   </button>
                   <span className="flex-1 text-center font-bold">{qty}</span>
-                  <button type="button" onClick={() => bumpPosQty(p.id, 1)} className={`w-8 h-8 rounded-full font-bold ${qty ? "bg-kraft text-ink" : "bg-ink/10"}`}>
+                  <button type="button" onClick={() => bumpPosQty(p.id, 1)} disabled={gone} className={`w-11 h-11 rounded-full font-bold ${qty ? "bg-kraft text-ink" : "bg-ink/10"}`}>
                     +
                   </button>
                 </div>
@@ -557,8 +741,9 @@ export default function App() {
           {campur.addons.map((v) => {
             const qty = posQty[v.id] || 0;
             const extras = qty && v.extra ? posExtra[v.id] || 0 : 0;
+            const gone = isSold(soldOut, campurSoldKey(v.id));
             return (
-              <div key={v.id} className={`rounded-2xl px-3 py-2 min-w-[11rem] ${qty ? "chip-on" : "bg-white"}`}>
+              <div key={v.id} className={`rounded-2xl px-3 py-2 min-w-[11rem] ${gone ? "opacity-50 bg-white" : qty ? "chip-on" : "bg-white"}`}>
                 {editCampur ? (
                   <div className="space-y-1 mb-1">
                     <input value={v.name} onChange={(e) => patchCampurItem("addons", v.id, { name: e.target.value })} className="w-full rounded-lg px-2 py-1 text-ink text-sm" />
@@ -574,14 +759,18 @@ export default function App() {
                 ) : (
                   <p className="font-bold text-sm">
                     {v.name} · {money(v.price)}
+                    {gone ? " · sold out" : ""}
                   </p>
                 )}
+                <button type="button" onClick={() => toggleSold(campurSoldKey(v.id))} className="text-xs underline mt-1">
+                  {gone ? "Back on menu" : "Sold out"}
+                </button>
                 <div className="flex items-center gap-1 mt-1">
-                  <button type="button" onClick={() => bumpPosQty(v.id, -1)} disabled={qty < 1} className="w-7 h-7 rounded-full font-bold bg-white/70">
+                  <button type="button" onClick={() => bumpPosQty(v.id, -1)} disabled={qty < 1} className="w-11 h-11 rounded-full font-bold bg-white/70">
                     −
                   </button>
                   <span className="min-w-[1.5rem] text-center font-bold">{qty}</span>
-                  <button type="button" onClick={() => bumpPosQty(v.id, 1)} className="w-7 h-7 rounded-full font-bold bg-white/70">
+                  <button type="button" onClick={() => bumpPosQty(v.id, 1)} disabled={gone} className="w-11 h-11 rounded-full font-bold bg-white/70">
                     +
                   </button>
                   {v.extra ? (
@@ -609,13 +798,61 @@ export default function App() {
         ) : (
           <div className="mb-8" />
         )}
-        <button onClick={sendPlate} disabled={sending} className="w-full bg-ink text-kraft rounded-2xl py-4 text-xl font-display ticket">
-          Total Table {posTable} · {money(posGrand)}
+        <button onClick={sendPlate} disabled={sending || !online} className="w-full bg-ink text-kraft rounded-2xl py-4 text-xl font-display ticket disabled:opacity-40">
+          {posConfirm ? "Tap again to send · " : "Total Table "}
+          {posTable} · {money(posGrand)}
           {posType === "bungkus" ? " · Bungkus" : " · Dine-In"}
         </button>
+        {posConfirm ? <p className="mt-2 text-center text-sm font-bold text-chili">Check table {posTable}. Tap the button once more to send to kitchen.</p> : null}
         <button onClick={() => go("bill", posTable)} className="mt-3 w-full bg-white rounded-2xl py-3 font-bold">
           Open Table {posTable} bill
         </button>
+        <section className="mt-10 bg-white/80 rounded-3xl border border-ink/10 p-4 sm:p-5">
+          <div className="flex flex-wrap justify-between items-end gap-3 mb-5">
+            <div>
+              <p className="uppercase tracking-[0.2em] text-teak text-xs">Guest phones</p>
+              <h3 className="font-display text-3xl leading-none">Sold out board</h3>
+              <p className="text-sm opacity-70 mt-1">Tap a dish to hide it on table QR menus.</p>
+            </div>
+            <p className="text-sm font-bold">
+              {MENU.reduce((s, c) => s + c.items.filter((i) => isSold(soldOut, menuSoldKey(i.id))).length, 0) || "None"}{" "}
+              sold out
+            </p>
+          </div>
+          <div className="space-y-5">
+            {MENU.map((c) => {
+              const goneCount = c.items.filter((i) => isSold(soldOut, menuSoldKey(i.id))).length;
+              return (
+                <div key={c.cat}>
+                  <div className="flex items-baseline justify-between gap-3 mb-2 pb-1 border-b border-ink/10">
+                    <h4 className="font-bold">{c.cat}</h4>
+                    <span className={`text-xs font-bold ${goneCount ? "text-chili" : "opacity-50"}`}>
+                      {goneCount ? goneCount + " sold out" : "all on"}
+                    </span>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-1.5">
+                    {c.items.map((item) => {
+                      const gone = isSold(soldOut, menuSoldKey(item.id));
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => toggleSold(menuSoldKey(item.id))}
+                          className={`min-h-11 px-3 rounded-xl text-left text-sm flex items-center justify-between gap-3 ${gone ? "bg-chili text-white" : "bg-kraft/80"}`}
+                        >
+                          <span className="font-bold leading-tight">{item.name}</span>
+                          <span className={`shrink-0 text-[11px] uppercase tracking-wide ${gone ? "opacity-90" : "opacity-50"}`}>
+                            {gone ? "Sold out" : "On"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       </main>
     );
   } else if (view === "kds") {
@@ -991,29 +1228,30 @@ export default function App() {
     page = (
       <>
         <main className="max-w-5xl mx-auto px-4 pb-52 pt-6">
+          {!online ? (
+            <p className="mb-4 text-sm font-bold bg-chili/15 border border-chili text-chili rounded-xl px-3 py-2">Offline. Your tray is saved on this phone. Send when the network is back.</p>
+          ) : null}
+          {!table ? (
+            <p className="mb-4 text-sm font-bold bg-chili/15 border border-chili text-chili rounded-xl px-3 py-2">Scan the QR on your table. Ordering is locked to tables 01–20.</p>
+          ) : null}
+          {guestTickets.length ? (
+            <div className="mb-5 guest-card">
+              <p className="text-xs uppercase tracking-[0.2em] text-teak">Kitchen for Table {table}</p>
+              <ul className="mt-2 space-y-1 text-sm">
+                {guestTickets.map((t) => (
+                  <li key={t.id} className="flex justify-between gap-2">
+                    <span className="font-bold">{ticketCall(t)}</span>
+                    <span>{kitchenWord(t.status)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <div className="flex flex-wrap items-center gap-3 mb-5">
             {table ? (
               <p className="text-sm font-bold">Table {table}</p>
             ) : (
-              <label className="text-sm">
-                Table
-                <select
-                  value={table}
-                  onChange={(e) => {
-                    const t = e.target.value;
-                    setTable(t);
-                    setQuery("menu", t || undefined);
-                  }}
-                  className="ml-2 guest-surface rounded-lg px-2 py-1"
-                >
-                  <option value="">Select</option>
-                  {TABLES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <p className="text-sm font-bold text-chili">No table</p>
             )}
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search menu" className="flex-1 min-w-[160px] guest-surface rounded-lg px-3 py-2" />
           </div>
@@ -1035,11 +1273,12 @@ export default function App() {
                     const drink = choice[item.id] || (item.options && item.options[0]) || "";
                     const temp = choice[item.id + "-t"] || "Hot";
                     const qty = trayQtyFor(item);
+                    const gone = isSold(soldOut, menuSoldKey(item.id));
                     return (
-                      <article key={item.id} className="guest-card">
+                      <article key={item.id} className={`guest-card ${gone ? "opacity-50" : ""}`}>
                         <div className="flex justify-between gap-3">
                           <div>
-                            <h3 className="font-bold text-lg">{item.name}</h3>
+                            <h3 className="font-bold text-lg">{item.name}{gone ? " · sold out" : ""}</h3>
                             {item.canned ? <p className="text-xs opacity-60">Can · no bungkus packing</p> : null}
                             {item.desc ? <p className="text-sm opacity-70">{item.desc}</p> : null}
                           </div>
@@ -1064,11 +1303,11 @@ export default function App() {
                           </div>
                         ) : null}
                         <div className="mt-3 flex items-center gap-2">
-                          <button type="button" disabled={qty < 1} onClick={() => bumpItem(item, -1)} className="w-10 h-10 rounded-xl guest-chip font-bold text-xl disabled:opacity-40">
+                          <button type="button" disabled={qty < 1} onClick={() => bumpItem(item, -1)} className="w-11 h-11 min-w-11 min-h-11 rounded-xl guest-chip font-bold text-xl disabled:opacity-40">
                             −
                           </button>
-                          <span className="flex-1 text-center font-bold text-lg">{qty}</span>
-                          <button type="button" onClick={() => bumpItem(item, 1)} className="w-10 h-10 rounded-xl guest-plus font-bold text-xl">
+                          <span className="flex-1 text-center font-bold text-lg">{gone ? "—" : qty}</span>
+                          <button type="button" disabled={gone || !table} onClick={() => bumpItem(item, 1)} className="w-11 h-11 min-w-11 min-h-11 rounded-xl guest-plus font-bold text-xl disabled:opacity-40">
                             +
                           </button>
                         </div>
@@ -1095,7 +1334,7 @@ export default function App() {
               Bungkus adds {money(PACKING)} packing per item, not canned drinks ({guestPackCount} × {money(PACKING)} = {money(guestPacking)}).
             </p>
           ) : null}
-          <button onClick={() => setModal(true)} className="max-w-md mx-auto block w-full guest-chip-on rounded-2xl px-4 py-3 font-bold">
+          <button onClick={() => setModal(true)} disabled={!online || !table} className="max-w-md mx-auto block w-full guest-chip-on rounded-2xl px-4 py-4 font-bold disabled:opacity-40">
             <i className="fa-solid fa-bowl-food mr-2" />
             Total Table {table || "--"} · {money(guestTotal)}
             {orderType ? " · " + (orderType === "bungkus" ? "Bungkus" : "Dine-In") : ""}
@@ -1118,11 +1357,11 @@ export default function App() {
                       <p className="text-sm">{money(t.price)}{t.pack === false ? " · can, no packing" : ""}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button className="w-8 h-8 rounded-full guest-chip" onClick={() => setTray((prev) => prev.map((x) => (x.name === t.name ? { ...x, qty: x.qty - 1 } : x)).filter((x) => x.qty > 0))}>
-                        -
+                      <button className="w-11 h-11 rounded-xl guest-chip font-bold" onClick={() => setTray((prev) => prev.map((x) => (x.name === t.name ? { ...x, qty: x.qty - 1 } : x)).filter((x) => x.qty > 0))}>
+                        −
                       </button>
-                      <span>{t.qty}</span>
-                      <button className="w-8 h-8 rounded-full guest-chip" onClick={() => setTray((prev) => prev.map((x) => (x.name === t.name ? { ...x, qty: x.qty + 1 } : x)))}>
+                      <span className="min-w-[1.5rem] text-center font-bold">{t.qty}</span>
+                      <button className="w-11 h-11 rounded-xl guest-chip font-bold" onClick={() => setTray((prev) => prev.map((x) => (x.name === t.name ? { ...x, qty: x.qty + 1 } : x)))}>
                         +
                       </button>
                     </div>
@@ -1154,15 +1393,76 @@ export default function App() {
               <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full mt-3 rounded-xl p-3 text-sm guest-chip" placeholder="Kitchen notes" />
               <button
                 onClick={submitGuest}
-                disabled={sending || !orderType}
-                className={`mt-3 w-full rounded-xl py-3 font-bold ${orderType ? "bg-chili text-white" : "bg-ink/20 text-ink/50"}`}
+                disabled={sending || !orderType || !online || !table}
+                className={`mt-3 w-full rounded-xl py-4 font-bold text-lg ${orderType ? "bg-chili text-white" : "bg-ink/20 text-ink/50"}`}
               >
-                {orderType ? "Send " + (orderType === "bungkus" ? "Bungkus" : "Dine-In") + " · " + money(guestTotal) : "Pick Dine-In or Bungkus first"}
+                {!orderType
+                  ? "Pick Dine-In or Bungkus first"
+                  : guestConfirm
+                    ? "Yes, send to kitchen · Table " + (table || "--") + " · " + money(guestTotal)
+                    : "Send " + (orderType === "bungkus" ? "Bungkus" : "Dine-In") + " · " + money(guestTotal)}
               </button>
+              {guestConfirm ? <p className="mt-2 text-sm font-bold text-chili">Check Table {table}. Tap once more. If it fails, the tray stays.</p> : null}
             </div>
           </div>
         ) : null}
       </>
+    );
+  }
+
+  if (isStaffView(view) && !staffOk) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <form
+          className="w-full max-w-sm bg-white/85 rounded-3xl p-6 text-center border border-ink/10"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (unlockStaff(staffPw)) {
+              setStaffOk(true);
+              setStaffErr("");
+              setStaffPw("");
+            } else {
+              setStaffErr("Wrong password");
+            }
+          }}
+        >
+          <AimsMark size={108} />
+          <p className="mt-4 text-[11px] tracking-[0.25em] uppercase text-teak">Aims Solution</p>
+          <h1 className="font-display text-3xl">Staff lock</h1>
+          <p className="mt-1 text-sm opacity-70">POS, kitchen, bills, and reports need the admin password.</p>
+          <input
+            type="password"
+            value={staffPw}
+            onChange={(e) => {
+              setStaffPw(e.target.value);
+              setStaffErr("");
+            }}
+            autoComplete="current-password"
+            placeholder="Admin password"
+            className="mt-5 w-full min-h-12 rounded-xl px-4 bg-kraft border border-ink/20 text-center text-lg"
+          />
+          {staffErr ? <p className="mt-2 text-chili font-bold text-sm">{staffErr}</p> : null}
+          <button type="submit" className="mt-4 w-full min-h-12 rounded-2xl bg-ink text-kraft font-bold text-lg">
+            Unlock
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  if (view === "menu" && guestSplash) {
+    return (
+      <div className="guest-shell guest-splash" onClick={() => setGuestSplash(false)}>
+        <AimsMark size={148} />
+        <p className="mt-5 text-[11px] tracking-[0.28em] uppercase text-teak">Aims Solution</p>
+        <h1 className="font-display text-4xl mt-1">IFM Kopitiam</h1>
+        {table ? <p className="mt-2 font-bold">Table {table}</p> : <p className="mt-2 font-bold text-chili">Scan a table QR</p>}
+        <p className="mt-6 text-sm opacity-70">Loading menu…</p>
+        <div className="aims-loadbar" />
+        <button type="button" className="mt-8 min-h-12 px-6 rounded-full guest-chip-on font-bold" onClick={() => setGuestSplash(false)}>
+          Tap to order
+        </button>
+      </div>
     );
   }
 

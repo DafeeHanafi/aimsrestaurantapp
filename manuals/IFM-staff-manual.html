@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>IFM Kopitiam — Staff manual</title>
+  <style>
+    body { font-family: Georgia, serif; max-width: 720px; margin: 24px auto; padding: 0 20px; color: #1c1410; line-height: 1.45; }
+    h1 { font-size: 28px; margin: 0 0 8px; }
+    .kicker { letter-spacing: .2em; text-transform: uppercase; font-size: 11px; color: #6b3f24; font-family: Calibri, sans-serif; }
+    h2 { font-size: 18px; margin: 22px 0 6px; }
+    p, li { font-size: 15px; }
+    code { font-family: Consolas, monospace; font-size: 13px; }
+    .note { background: #f3e6d4; padding: 12px 14px; }
+    .warn { background: #f8e4dc; padding: 12px 14px; }
+  </style>
+</head>
+<body>
+  <p class="kicker">Staff only · Aims Solution IFM Kopitiam</p>
+  <h1>Staff manual</h1>
+  <p>Do not put this on table QR stickers. Keep a copy on the counter and kitchen phones, or print it.</p>
+  <div class="warn">This file is for staff download only. It is not part of the live customer website.</div>
+
+  <h2>Staff links</h2>
+  <p>Site: <code>https://aimsrestaurantapp.netlify.app</code></p>
+  <ul>
+    <li>POS Nasi Campur — <code>?view=pos</code></li>
+    <li>Kitchen — <code>?view=kds</code></li>
+    <li>Table bills — <code>?view=bill</code></li>
+    <li>Z-report — <code>?view=z</code></li>
+    <li>Accounts CSV — <code>?view=accounts</code></li>
+  </ul>
+  <p>Guest tables use <code>?table=01</code> to <code>?table=20</code> only. Guest pages hide POS / KDS / Bills.</p>
+
+  <h2>A. Nasi Campur POS</h2>
+  <p>Open POS. Tap the table number. Choose Dine-In or Bungkus. Set protein portion qty with + / −. Rice is free — do not add a rice line. Tap +50¢ as many times as needed for extra / bigger meat. Ikan has no extra. Veggie and condiments is $1 each, also with +50¢ if needed. You need a protein before Send plate. Bungkus packing is $0.30 × every protein and veggie portion.</p>
+
+  <h2>B. Guest à la carte</h2>
+  <p>Customer scans the table QR. If they order the wrong table, check the number on screen. Their send creates a kitchen ticket and adds to that table bill. Breakfast drink choice and Hot/Cold must be selected on the card before quantity.</p>
+
+  <h2>C. Kitchen (KDS)</h2>
+  <p>New tickets land in Preparing. Tap preparing → ready when plated. Tap ready → done when taken. Filter Preparing / Ready / Done / All. Ticket shows qty × item, Dine-In or Bungkus, and guest vs POS.</p>
+
+  <h2>D. Table bills</h2>
+  <p>Bills combines guest menu + POS for that table. Collect cash / PayNow at the counter (payment is not in the app). Close bill when they have paid. History stays under settled. Closing does not delete sales.</p>
+
+  <h2>E. Z-report and close day</h2>
+  <p>Z is today in Singapore business date. Dine-In vs Bungkus vs total. Export today CSV if needed. Close day stamps a snapshot. After that the day can show as already closed.</p>
+
+  <h2>F. Accounts</h2>
+  <p>Accts lists every sold line. Set From / To dates. Export Excel CSV (opens in Excel). Use this for bookkeeping, not the kitchen screen.</p>
+
+  <h2>G. If something fails</h2>
+  <p>Top-left should say hosted supabase, not connecting. If send fails, check the phone network and try again. Do not mix this site with other Aims apps. PIN, in-app payments, printers, and offline mode are not live yet — write tickets by hand only if the site is down.</p>
+</body>
+</html>

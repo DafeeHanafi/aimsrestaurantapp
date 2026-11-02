@@ -91,3 +91,60 @@ body {
   color: var(--g-text);
   border-radius: calc(var(--g-radius) + 8px);
 }
+
+.aims-logo {
+  display: block;
+  flex-shrink: 0;
+}
+
+.guest-splash {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.25rem 4rem;
+  text-align: center;
+}
+
+.guest-splash .aims-logo {
+  animation: aims-logo-in 0.7s ease-out;
+}
+
+.aims-loadbar {
+  width: 10rem;
+  height: 4px;
+  margin-top: 1rem;
+  border-radius: 999px;
+  background: rgba(28, 20, 16, 0.12);
+  overflow: hidden;
+}
+
+.aims-loadbar::after {
+  content: "";
+  display: block;
+  width: 40%;
+  height: 100%;
+  background: #c23c16;
+  animation: aims-load 2.2s ease-in-out;
+}
+
+@keyframes aims-logo-in {
+  from {
+    opacity: 0;
+    transform: scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes aims-load {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(280%);
+  }
+}

@@ -64,6 +64,19 @@ export async function insertOrder(
     items: { name: string; qty: number; unit_price: number }[];
   }
 ) {
+  if (!payload.items.length) throw new Error("Empty order");
+  const rpc = await sb.rpc("place_order", {
+    p_table_number: payload.table_number,
+    p_order_type: payload.order_type,
+    p_source: payload.source,
+    p_kitchen_notes: payload.kitchen_notes,
+    p_total: payload.total,
+    p_items: payload.items
+  });
+  if (!rpc.error && rpc.data) {
+    const row = Array.isArray(rpc.data) ? rpc.data[0] : rpc.data;
+    if (row?.id) return row as Pick<Order, "id" | "ticket_no" | "table_number">;
+  }
   const { data, error } = await sb
     .from("orders")
     .insert({
@@ -86,8 +99,39 @@ export async function insertOrder(
       unit_price: i.unit_price
     }))
   );
-  if (itemsRes.error) throw new Error(itemsRes.error.message);
+  if (itemsRes.error) {
+    await sb.from("orders").delete().eq("id", data.id);
+    throw new Error(itemsRes.error.message);
+  }
   return data as Pick<Order, "id" | "ticket_no" | "table_number">;
+}
+
+export async function loadOpenOrdersForTable(sb: SupabaseClient, tableNumber: string): Promise<Order[]> {
+  const ordersRes = await sb
+    .from("orders")
+    .select("*")
+    .eq("table_number", tableNumber)
+    .eq("settled", false)
+    .order("created_at", { ascending: false })
+    .limit(12);
+  if (ordersRes.error) throw new Error(ordersRes.error.message);
+  const orders = (ordersRes.data || []) as Order[];
+  const ids = orders.map((o) => o.id);
+  let items: OrderItem[] = [];
+  if (ids.length) {
+    const itemsRes = await sb.from("order_items").select("*").in("order_id", ids);
+    if (itemsRes.error) throw new Error(itemsRes.error.message);
+    items = (itemsRes.data || []) as OrderItem[];
+  }
+  const byOrder: Record<string, OrderItem[]> = {};
+  items.forEach((item) => {
+    (byOrder[item.order_id] || (byOrder[item.order_id] = [])).push(item);
+  });
+  return orders.map((order) => ({
+    ...order,
+    status: String(order.status || "").trim(),
+    order_items: byOrder[order.id] || []
+  }));
 }
 
 export function trayAsItems(tray: TrayLine[]) {

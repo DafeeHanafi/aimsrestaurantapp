@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-label="Aims Solution">
+  <circle cx="120" cy="120" r="112" fill="#f3e6d4" stroke="#6b3f24" stroke-width="8"/>
+  <circle cx="120" cy="120" r="96" fill="none" stroke="#c23c16" stroke-width="3"/>
+  <path d="M120 48 L148 132 H92 Z" fill="#1c1410"/>
+  <rect x="100" y="118" width="40" height="8" fill="#f3e6d4"/>
+  <text x="120" y="168" text-anchor="middle" font-family="Georgia, serif" font-size="22" font-weight="700" fill="#6b3f24">AIMS</text>
+  <text x="120" y="190" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" letter-spacing="3" fill="#c23c16">SOLUTION</text>
+</svg>

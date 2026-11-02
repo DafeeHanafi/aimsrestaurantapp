@@ -24,6 +24,13 @@ export function typeLabel(t?: string) {
   return t === "bungkus" ? "Bungkus" : "Dine-In";
 }
 
+export function kitchenWord(status?: string) {
+  const s = String(status || "").toLowerCase();
+  if (s === "ready") return "Ready — wait for staff";
+  if (s === "done") return "Served";
+  return "Cooking";
+}
+
 function csvCell(v: unknown) {
   const s = String(v == null ? "" : v);
   if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
